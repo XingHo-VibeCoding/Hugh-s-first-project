@@ -1,0 +1,18 @@
+# ===== 免进清单（.gitignore）=====
+# 写在这里的文件，Git 会假装看不见，永远不会上传到 GitHub。
+# 每行一个规则，前缀 # 是注释。
+
+# ---- 敏感配置：绝对不能上传 ----
+.env
+.env.local
+.env.*.local
+
+# ---- 依赖包目录：体积巨大，可随时重新安装 ----
+node_modules/
+
+# ---- 系统与编辑器产生的杂物 ----
+Thumbs.db
+Desktop.ini
+.DS_Store
+.vscode/
+*.log

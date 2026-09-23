@@ -3,45 +3,98 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>my-first-project｜占位首页</title>
-  <style>
-    body {
-      margin: 0;
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-family: system-ui, -apple-system, "Microsoft YaHei", sans-serif;
-      background: #f6f6f4;
-      color: #2c2c2a;
-    }
-    .card {
-      background: #ffffff;
-      border: 1px solid #dcdcd6;
-      border-radius: 12px;
-      padding: 40px 48px;
-      max-width: 520px;
-      text-align: center;
-    }
-    h1 { font-size: 22px; margin: 0 0 12px; font-weight: 600; }
-    p { font-size: 15px; line-height: 1.8; margin: 8px 0; color: #5f5e5a; }
-    .tag {
-      display: inline-block;
-      margin-top: 20px;
-      padding: 4px 12px;
-      border-radius: 999px;
-      background: #e1f5ee;
-      color: #0f6e56;
-      font-size: 13px;
-    }
-  </style>
+  <title>学分规划助手｜按板块算清学分</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div class="card">
-    <h1>占位首页已上线</h1>
-    <p>这是项目的第一个页面，目前只是一个占位符。</p>
-    <p>真正的功能会从 Day 7 开始动手做。</p>
-    <span class="tag">Day 2 · 首次提交</span>
-  </div>
+  <header class="site-header">
+    <h1>学分规划助手</h1>
+    <p class="subtitle">按板块算清"修够没有、还差多少"——判断哪些课必须选，哪些不必再选。</p>
+  </header>
+
+  <main class="layout">
+    <section class="panel" id="panel-categories">
+      <h2>我的板块</h2>
+      <p class="hint">先把你培养方案里的板块抄进来：每个板块要修多少学分、有哪些特殊条件。</p>
+
+      <form class="form-row" id="category-form">
+        <input type="text" id="category-name" placeholder="板块名，如：专业选修" maxlength="20">
+        <input type="number" id="category-credits" step="0.5" min="0.5" placeholder="要求学分（可留空）">
+        <input type="text" id="category-note" placeholder="特殊条件备注（可留空）" maxlength="100">
+        <button type="submit" class="btn">添加板块</button>
+      </form>
+      <p class="form-error" id="category-error" hidden></p>
+
+      <div class="list" id="category-list">
+        <p class="empty">（步骤 3：这里将显示板块卡片）</p>
+      </div>
+    </section>
+
+    <section class="panel" id="panel-courses">
+      <h2>课程列表</h2>
+      <p class="hint">把已经修过的课、以及下学期打算修的课录进来，标上属于哪个板块。</p>
+
+      <form class="form-row form-row-course" id="course-form">
+        <input type="text" id="course-name" placeholder="课程名，如：高等数学" maxlength="30">
+        <input type="number" id="course-credits" step="0.5" min="0.5" placeholder="学分">
+        <select id="course-category">
+          <option value="">选择板块</option>
+        </select>
+        <select id="course-status">
+          <option value="done">已修</option>
+          <option value="planned">计划修</option>
+        </select>
+        <input type="number" id="course-score" min="0" max="100" step="1" placeholder="成绩（可选）">
+        <button type="submit" class="btn">添加课程</button>
+      </form>
+      <p class="form-error" id="course-error" hidden></p>
+
+      <div class="list" id="course-list">
+        <p class="empty">（步骤 4：这里将显示课程列表）</p>
+      </div>
+    </section>
+
+    <section class="panel" id="panel-overview">
+      <h2>进度总览</h2>
+      <p class="hint">每个板块还差多少学分，哪些板块的课不必再选。</p>
+      <div class="overview" id="overview"></div>
+
+      <div class="rule-row">
+        <label for="gpa-rule">GPA 换算规则</label>
+        <select id="gpa-rule">
+          <option value="4.0">4.0 制（常见）</option>
+          <option value="5.0">5.0 制</option>
+          <option value="grade">等级制（优 / 良 / 中 / 及格）</option>
+        </select>
+        <span class="rule-note">换算规则各校不同，以本校教务处规定为准。</span>
+      </div>
+
+      <dl class="numbers">
+        <div class="number-item">
+          <dt>已修总学分</dt>
+          <dd id="stat-total">—</dd>
+        </div>
+        <div class="number-item">
+          <dt>加权平均分</dt>
+          <dd id="stat-average">—</dd>
+        </div>
+        <div class="number-item">
+          <dt>GPA</dt>
+          <dd id="stat-gpa">—</dd>
+        </div>
+        <div class="number-item">
+          <dt>已加载板块 / 课程</dt>
+          <dd id="stat-counts">—</dd>
+        </div>
+      </dl>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p id="storage-notice">数据只保存在本机浏览器，不上传服务器。清理浏览器数据会丢失，请注意。</p>
+  </footer>
+
+  <script src="store.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>

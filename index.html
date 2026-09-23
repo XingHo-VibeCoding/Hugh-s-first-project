@@ -8,87 +8,118 @@
 </head>
 <body>
   <header class="site-header">
-    <h1>学分规划助手</h1>
-    <p class="subtitle">按板块算清"修够没有、还差多少"——判断哪些课必须选，哪些不必再选。</p>
+    <div class="header-text">
+      <h1>学分规划助手</h1>
+      <p class="subtitle">按板块算清"修够没有、还差多少"——哪些课必须选，哪些不必再选。</p>
+    </div>
+    <div class="dev-tools">
+      <button type="button" class="btn-ghost" id="mock-load">载入示例数据</button>
+      <button type="button" class="btn-ghost" id="mock-clear" hidden>清除示例</button>
+      <label class="dev-label" for="state-preview">状态预览</label>
+      <select id="state-preview">
+        <option value="">正常</option>
+        <option value="loading">加载中</option>
+        <option value="empty">空</option>
+        <option value="error">错误</option>
+      </select>
+    </div>
   </header>
 
-  <main class="layout">
-    <section class="panel" id="panel-categories">
-      <h2>我的板块</h2>
-      <p class="hint">先把你培养方案里的板块抄进来：每个板块要修多少学分、有哪些特殊条件。</p>
+  <div class="page-body">
+    <div class="banner banner-error" id="global-error" hidden></div>
+    <div class="banner banner-mock" id="mock-banner" hidden>
+      当前显示的是<strong>示例数据</strong>，只填在页面上、不会保存；点右上角「清除示例」回到你自己的数据。
+    </div>
 
-      <form class="form-row" id="category-form">
-        <input type="text" id="category-name" placeholder="板块名，如：专业选修" maxlength="20">
-        <input type="number" id="category-credits" step="0.5" min="0.5" placeholder="要求学分（可留空）">
-        <input type="text" id="category-note" placeholder="特殊条件备注（可留空）" maxlength="100">
-        <button type="submit" class="btn">添加板块</button>
-      </form>
-      <p class="form-error" id="category-error" hidden></p>
+    <div class="skeleton-grid" id="skeleton" hidden>
+      <div class="skeleton-card"></div>
+      <div class="skeleton-card"></div>
+      <div class="skeleton-card"></div>
+      <div class="skeleton-card"></div>
+    </div>
 
-      <div class="list" id="category-list">
-        <p class="empty">（步骤 3：这里将显示板块卡片）</p>
-      </div>
-    </section>
+    <main class="layout" id="layout">
+      <section class="panel" id="panel-credit">
+        <h2><span class="panel-num">1</span>学分板块</h2>
+        <p class="hint">把培养方案里的板块抄进来：每个板块要修多少学分、有哪些特殊条件。</p>
 
-    <section class="panel" id="panel-courses">
-      <h2>课程列表</h2>
-      <p class="hint">把已经修过的课、以及下学期打算修的课录进来，标上属于哪个板块。</p>
+        <form class="form-row" id="category-form">
+          <input type="text" id="category-name" placeholder="板块名，如：专业选修" maxlength="20">
+          <input type="number" id="category-credits" step="0.5" min="0.5" placeholder="要求学分（可留空）">
+          <input type="text" id="category-note" placeholder="特殊条件备注（可留空）" maxlength="100">
+          <button type="submit" class="btn">添加板块</button>
+        </form>
+        <p class="form-error" id="category-error" hidden></p>
 
-      <form class="form-row form-row-course" id="course-form">
-        <input type="text" id="course-name" placeholder="课程名，如：高等数学" maxlength="30">
-        <input type="number" id="course-credits" step="0.5" min="0.5" placeholder="学分">
-        <select id="course-category">
-          <option value="">选择板块</option>
-        </select>
-        <select id="course-status">
-          <option value="done">已修</option>
-          <option value="planned">计划修</option>
-        </select>
-        <input type="number" id="course-score" min="0" max="100" step="1" placeholder="成绩（可选）">
-        <button type="submit" class="btn">添加课程</button>
-      </form>
-      <p class="form-error" id="course-error" hidden></p>
+        <div class="list" id="category-list"></div>
+      </section>
 
-      <div class="list" id="course-list">
-        <p class="empty">（步骤 4：这里将显示课程列表）</p>
-      </div>
-    </section>
+      <section class="panel" id="panel-course">
+        <h2><span class="panel-num">2</span>课程板块</h2>
+        <p class="hint">把已经修过的课、以及下学期打算修的课录进来，标上属于哪个板块。</p>
 
-    <section class="panel" id="panel-overview">
-      <h2>进度总览</h2>
-      <p class="hint">每个板块还差多少学分，哪些板块的课不必再选。</p>
-      <div class="overview" id="overview"></div>
+        <form class="form-row form-row-course" id="course-form">
+          <input type="text" id="course-name" placeholder="课程名，如：高等数学" maxlength="30">
+          <input type="number" id="course-credits" step="0.5" min="0.5" placeholder="学分">
+          <select id="course-category">
+            <option value="">选择板块</option>
+          </select>
+          <select id="course-status">
+            <option value="done">已修</option>
+            <option value="planned">计划修</option>
+          </select>
+          <input type="number" id="course-score" min="0" max="100" step="1" placeholder="成绩（可选）">
+          <button type="submit" class="btn">添加课程</button>
+        </form>
+        <p class="form-error" id="course-error" hidden></p>
 
-      <div class="rule-row">
-        <label for="gpa-rule">GPA 换算规则</label>
-        <select id="gpa-rule">
-          <option value="4.0">4.0 制（常见）</option>
-          <option value="5.0">5.0 制</option>
-          <option value="grade">等级制（优 / 良 / 中 / 及格）</option>
-        </select>
-        <span class="rule-note">换算规则各校不同，以本校教务处规定为准。</span>
-      </div>
+        <div class="list" id="course-list"></div>
+      </section>
 
-      <dl class="numbers">
-        <div class="number-item">
-          <dt>已修总学分</dt>
-          <dd id="stat-total">—</dd>
+      <section class="panel" id="panel-gpa">
+        <h2><span class="panel-num">3</span>绩点板块</h2>
+        <p class="hint">已经修到的学分与分数，用来判断自己现在站在哪。</p>
+
+        <dl class="numbers">
+          <div class="number-item">
+            <dt>已修总学分</dt>
+            <dd id="stat-total">—</dd>
+          </div>
+          <div class="number-item">
+            <dt>加权平均分</dt>
+            <dd id="stat-average">—</dd>
+          </div>
+          <div class="number-item">
+            <dt>GPA</dt>
+            <dd id="stat-gpa">—</dd>
+          </div>
+          <div class="number-item">
+            <dt>已加载板块 / 课程</dt>
+            <dd id="stat-counts">—</dd>
+          </div>
+        </dl>
+
+        <div class="rule-row">
+          <label for="gpa-rule">GPA 换算规则</label>
+          <select id="gpa-rule">
+            <option value="4.0">4.0 制（常见）</option>
+            <option value="5.0">5.0 制</option>
+            <option value="grade">等级制（优 / 良 / 中 / 及格）</option>
+          </select>
+          <span class="rule-note">换算规则各校不同，以本校教务处规定为准。</span>
         </div>
-        <div class="number-item">
-          <dt>加权平均分</dt>
-          <dd id="stat-average">—</dd>
-        </div>
-        <div class="number-item">
-          <dt>GPA</dt>
-          <dd id="stat-gpa">—</dd>
-        </div>
-        <div class="number-item">
-          <dt>已加载板块 / 课程</dt>
-          <dd id="stat-counts">—</dd>
-        </div>
-      </dl>
-    </section>
-  </main>
+      </section>
+
+      <section class="panel" id="panel-decision">
+        <h2><span class="panel-num">4</span>决策板块</h2>
+        <p class="hint">每个板块还差多少学分、哪些板块的课不必再选、下一步建议优先选哪几门。</p>
+
+        <div class="overview" id="overview"></div>
+
+        <p class="future-note">二期计划：上传培养方案文件 / 图片，自动识别并填充板块与要求学分（一期不做）。</p>
+      </section>
+    </main>
+  </div>
 
   <footer class="site-footer">
     <p id="storage-notice">数据只保存在本机浏览器，不上传服务器。清理浏览器数据会丢失，请注意。</p>

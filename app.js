@@ -1,12 +1,12 @@
-// 学分规划助手 —— 页面交互与计算逻辑（Day 7）
-// 步骤 2：接入本机存储
-// 步骤 3：板块管理（F1）
-// 步骤 4：课程录入（F2）
-// 步骤 5：板块缺口与选课结论（F3）+ 总分与 GPA（F4）
+// 学分规划助手 —— 页面交互与计算逻辑
+// Day 7：本机存储接入、板块管理（F1）、课程录入（F2）、缺口与 GPA（F3/F4）
+// Day 8：主视图重组为四个板块（学分 / 课程 / 绩点 / 决策）、四种页面状态、
+//         mock 示例数据（只填页面、不落盘）、决策板块的"建议优先选哪几门"
 //
-// 代码分两层：
+// 代码分三层：
 //   1) 数据与计算层（不碰页面，可单独测试）
-//   2) 渲染与事件层（把结果画到页面上）
+//   2) 渲染层（把数据画成四个板块）
+//   3) 状态与事件层（四种页面状态、dev 工具、用户操作）
 
 // ---------------------------------------------------------------------------
 // 一、通用
@@ -24,15 +24,13 @@ function makeId() {
   return "id-" + Date.now().toString(36) + "-" + Math.floor(Math.random() * 1000).toString(36);
 }
 
-// 把数字显示成好读的样子（最多两位小数，去掉多余的 0）
 function formatNumber(value) {
   if (value === null || value === undefined) return "—";
-  const rounded = Math.round(value * 100) / 100;
-  return String(rounded);
+  return String(Math.round(value * 100) / 100);
 }
 
 // ---------------------------------------------------------------------------
-// 二、板块（F1）
+// 二、数据操作层 · 板块（F1）
 // ---------------------------------------------------------------------------
 
 function validateCategory(input) {
@@ -121,17 +119,15 @@ function removeCategory(data, id) {
 }
 
 // ---------------------------------------------------------------------------
-// 三、课程（F2）
+// 三、数据操作层 · 课程（F2）
 // ---------------------------------------------------------------------------
 
-// 已修 + 有成绩 + 低于 60 分 = 不及格（不计入已修学分）
 function isFailed(course) {
   return course.status === "done"
     && typeof course.score === "number"
     && course.score < 60;
 }
 
-// 这门课算不算"已修学分"（不及格的课不算）
 function countsAsDoneCredits(course) {
   return course.status === "done" && !isFailed(course);
 }
@@ -162,7 +158,7 @@ function validateCourse(input, data) {
   }
   const categoryExists = data.categories.some(function (c) { return c.id === input.categoryId; });
   if (!categoryExists) {
-    return { ok: false, error: "所属板块不存在，请先到“我的板块”里创建。" };
+    return { ok: false, error: "所属板块不存在，请先到“学分板块”里创建。" };
   }
 
   if (input.status !== "done" && input.status !== "planned") {
@@ -242,12 +238,9 @@ function categoryNameOf(data, categoryId) {
 }
 
 // ---------------------------------------------------------------------------
-// 四、计算层：板块缺口（F3）与总分 GPA（F4）
+// 四、计算层 · 板块缺口（F3）
 // ---------------------------------------------------------------------------
 
-// 各板块的缺口
-// 返回 [{ categoryId, name, note, requiredCredits, doneCredits, gap, plannedCourses }]
-// 说明：requiredCredits 为 null 表示"未设置"，不参与缺口计算
 function calcCategoryStats(data) {
   return data.categories.map(function (category) {
     const itsCourses = data.courses.filter(function (c) { return c.categoryId === category.id; });
@@ -262,7 +255,6 @@ function calcCategoryStats(data) {
       ? null
       : category.requiredCredits;
 
-    // 缺口 = 要求 - 已修；已修超出时按 0 处理（页面不出现负数）
     const gap = (required === null) ? null : Math.max(0, required - doneCredits);
 
     return {
@@ -277,7 +269,45 @@ function calcCategoryStats(data) {
   });
 }
 
-// GPA 换算表（各校规则不同，这里给三套常见口径，页面已标注"以本校规定为准"）
+// 决策建议（Day 8）：缺口 > 0 时，从"计划修课程"里按学分从大到小挑，
+// 算出"至少选几门可以补满缺口"。这是 PRD 后续待办第 5 条的算法，一期提前实现。
+function buildRecommendation(stat) {
+  if (stat.requiredCredits === null || stat.gap === null || stat.gap <= 0) {
+    return null;
+  }
+
+  const candidates = stat.plannedCourses.slice().sort(function (a, b) {
+    return b.credits - a.credits;
+  });
+
+  if (candidates.length === 0) {
+    return { level: "none", picked: [], count: 0, sum: 0, enough: false, remaining: stat.gap };
+  }
+
+  let sum = 0;
+  const picked = [];
+  for (let i = 0; i < candidates.length; i++) {
+    if (sum >= stat.gap) break;
+    sum += candidates[i].credits;
+    picked.push(candidates[i]);
+  }
+
+  const enough = sum >= stat.gap;
+
+  return {
+    level: enough ? "enough" : "short",
+    picked: picked,
+    count: picked.length,
+    sum: sum,
+    enough: enough,
+    remaining: enough ? 0 : stat.gap - sum
+  };
+}
+
+// ---------------------------------------------------------------------------
+// 五、计算层 · 总分与 GPA（F4）
+// ---------------------------------------------------------------------------
+
 const GPA_RULES = {
   "4.0": [
     { min: 90, point: 4.0 }, { min: 85, point: 3.7 }, { min: 82, point: 3.3 },
@@ -305,8 +335,6 @@ function gradePoint(score, ruleKey) {
   return 0;
 }
 
-// 已修总学分、加权平均分、GPA
-// 规则：只统计"计入已修学分"的课程（不及格不计）；成绩为空的课只计学分，不参与平均分与 GPA
 function calcOverall(data, ruleKey) {
   const counted = data.courses.filter(countsAsDoneCredits);
   const totalCredits = counted.reduce(function (sum, c) { return sum + c.credits; }, 0);
@@ -332,14 +360,36 @@ function calcOverall(data, ruleKey) {
 }
 
 // ---------------------------------------------------------------------------
-// 五、渲染与事件层
+// 六、示例数据（mock：只填在页面里，不写本机存储）
+// ---------------------------------------------------------------------------
+
+const MOCK_DATA = {
+  version: 1,
+  categories: [
+    { id: "mock-c1", name: "专业必修", requiredCredits: 40, note: "" },
+    { id: "mock-c2", name: "专业选修", requiredCredits: 6, note: "" },
+    { id: "mock-c3", name: "通识选修", requiredCredits: 12, note: "须含 2 学分艺术类" }
+  ],
+  courses: [
+    { id: "mock-k1", name: "高等数学", credits: 5, categoryId: "mock-c1", status: "done", score: 88 },
+    { id: "mock-k2", name: "大学英语", credits: 3, categoryId: "mock-c1", status: "done", score: 58 },
+    { id: "mock-k3", name: "大学物理", credits: 4, categoryId: "mock-c1", status: "done", score: 76 },
+    { id: "mock-k4", name: "数据库原理", credits: 3, categoryId: "mock-c2", status: "planned", score: null },
+    { id: "mock-k5", name: "算法设计", credits: 3, categoryId: "mock-c2", status: "planned", score: null },
+    { id: "mock-k6", name: "音乐鉴赏", credits: 2, categoryId: "mock-c3", status: "planned", score: null }
+  ]
+};
+
+// ---------------------------------------------------------------------------
+// 七、渲染层
 // ---------------------------------------------------------------------------
 
 let state = null;
 let editingId = null;
 let editingCourseId = null;
-let gapStats = [];                    // 各板块缺口（渲染课程卡片时也要用）
-let gpaRule = "4.0";                  // 当前 GPA 换算规则
+let gapStats = [];
+let gpaRule = "4.0";
+let mockMode = false;
 
 function showError(boxId, message) {
   const box = document.getElementById(boxId);
@@ -353,17 +403,24 @@ function showError(boxId, message) {
   }
 }
 
-function showStorageError(message) {
-  const notice = document.getElementById("storage-notice");
-  if (!notice) return;
-  notice.textContent = message;
-  notice.classList.add("notice-error");
+function showGlobalError(message) {
+  const box = document.getElementById("global-error");
+  if (!box) return;
+  box.textContent = message;
+  box.hidden = false;
+}
+
+function hideGlobalError() {
+  const box = document.getElementById("global-error");
+  if (!box) return;
+  box.textContent = "";
+  box.hidden = true;
 }
 
 function persist() {
   const result = CreditPlanner.saveData(state);
   if (!result.ok) {
-    showStorageError(result.message);
+    showGlobalError(result.message);
   }
 }
 
@@ -372,15 +429,8 @@ function renderAll() {
   renderCategoryOptions();
   renderCategories();
   renderCourses();
-  renderOverview();
-  renderCounts();
-}
-
-function renderCounts() {
-  const counts = document.getElementById("stat-counts");
-  if (counts) {
-    counts.textContent = state.categories.length + " 个板块 / " + state.courses.length + " 门课程";
-  }
+  renderGpa();
+  renderDecision();
 }
 
 function makeButton(label, action, className) {
@@ -399,13 +449,19 @@ function makeBadge(text, className) {
   return badge;
 }
 
-// 某板块是不是"已修够"（要求未设置时不判定）
+function makeEmpty(text) {
+  const empty = document.createElement("p");
+  empty.className = "empty";
+  empty.textContent = text;
+  return empty;
+}
+
 function isCategorySatisfied(categoryId) {
   const stat = gapStats.find(function (s) { return s.categoryId === categoryId; });
   return !!stat && stat.requiredCredits !== null && stat.gap === 0;
 }
 
-// ---- 板块 ----
+// ---- 板块①：学分板块 ----
 
 function requiredText(credits) {
   if (credits === null || credits === undefined) {
@@ -507,10 +563,9 @@ function renderCategories() {
   list.innerHTML = "";
 
   if (state.categories.length === 0) {
-    const empty = document.createElement("p");
-    empty.className = "empty";
-    empty.textContent = "还没有板块。先在上面添加第一个板块，例如“专业选修”。";
-    list.appendChild(empty);
+    list.appendChild(makeEmpty(
+      "还没有板块。先在上面添加第一个板块，例如“专业选修”，并填上它要求多少学分。"
+    ));
     return;
   }
 
@@ -532,7 +587,7 @@ function readEditCard(card) {
   };
 }
 
-// ---- 课程 ----
+// ---- 板块②：课程板块 ----
 
 function buildCategorySelect(className, selectedId, includeEmptyPlaceholder) {
   const select = document.createElement("select");
@@ -581,7 +636,6 @@ function buildCourseCard(course) {
   if (isFailed(course)) {
     head.appendChild(makeBadge("不及格 · 不计学分", "badge-fail"));
   }
-  // 所属板块已经修够了 → 这门计划修的课"可不选"
   if (course.status === "planned" && isCategorySatisfied(course.categoryId)) {
     head.appendChild(makeBadge("可不选", "badge-skip"));
   }
@@ -689,12 +743,11 @@ function renderCourses() {
   list.innerHTML = "";
 
   if (state.courses.length === 0) {
-    const empty = document.createElement("p");
-    empty.className = "empty";
-    empty.textContent = state.categories.length === 0
-      ? "先在左边创建板块，再回来录课程。"
-      : "还没有课程。先在上面添加一门已经修过的课吧。";
-    list.appendChild(empty);
+    list.appendChild(makeEmpty(
+      state.categories.length === 0
+        ? "先在左边「学分板块」创建板块，再回来录课程。"
+        : "还没有课程。先在上面添加一门已经修过的课，例如“高等数学 / 5 学分 / 必修 / 已修 / 88”。"
+    ));
     return;
   }
 
@@ -730,84 +783,9 @@ function renderCategoryOptions() {
   select.value = stillExists ? previous : "";
 }
 
-// ---- 进度总览（缺口 + 选课结论 + GPA） ----
+// ---- 板块③：绩点板块 ----
 
-function renderOverview() {
-  const box = document.getElementById("overview");
-  if (!box) return;
-
-  box.innerHTML = "";
-
-  if (gapStats.length === 0) {
-    const empty = document.createElement("p");
-    empty.className = "empty";
-    empty.textContent = "先创建板块并录入课程，这里会显示每个板块还差多少学分。";
-    box.appendChild(empty);
-  } else {
-    gapStats.forEach(function (stat) {
-      const row = document.createElement("div");
-      row.className = "overview-row";
-
-      const head = document.createElement("div");
-      head.className = "card-head";
-
-      const name = document.createElement("strong");
-      name.className = "card-title";
-      name.textContent = stat.name;
-
-      const done = document.createElement("span");
-      done.className = "card-credits";
-      done.textContent = stat.requiredCredits === null
-        ? "已修 " + formatNumber(stat.doneCredits) + " 学分"
-        : "已修 " + formatNumber(stat.doneCredits) + " / 要求 " + formatNumber(stat.requiredCredits) + " 学分";
-
-      head.appendChild(name);
-      head.appendChild(done);
-
-      let message = "";
-
-      if (stat.requiredCredits === null) {
-        head.appendChild(makeBadge("要求未设置", "badge-planned"));
-        message = "这个板块还没填要求学分，暂时不参与缺口计算。";
-      } else if (stat.gap > 0) {
-        head.appendChild(makeBadge("还差 " + formatNumber(stat.gap) + " 学分", "badge-fail"));
-        message = "需从计划修课程中自行挑选，修满 " + formatNumber(stat.gap) + " 学分。";
-      } else {
-        const extra = stat.doneCredits - stat.requiredCredits;
-        head.appendChild(makeBadge("已修够", "badge-done"));
-        message = extra > 0
-          ? "已修够（超出 " + formatNumber(extra) + " 学分），这个板块的课不必再选。"
-          : "已修够，这个板块的课不必再选。";
-      }
-
-      row.appendChild(head);
-
-      const text = document.createElement("p");
-      text.className = "overview-message";
-      text.textContent = message;
-      row.appendChild(text);
-
-      if (stat.note) {
-        const note = document.createElement("p");
-        note.className = "card-note";
-        note.textContent = "特殊条件：" + stat.note;
-        row.appendChild(note);
-      }
-
-      if (stat.plannedCourses.length > 0) {
-        const planned = document.createElement("p");
-        planned.className = "overview-planned";
-        planned.textContent = "计划修课程：" + stat.plannedCourses.map(function (c) {
-          return c.name + "（" + c.credits + " 学分）";
-        }).join("、") + (stat.gap !== null && stat.gap === 0 ? " —— 可以不用选" : "");
-        row.appendChild(planned);
-      }
-
-      box.appendChild(row);
-    });
-  }
-
-  // 数字区
+function renderGpa() {
   const overall = calcOverall(state, gpaRule);
 
   const totalBox = document.getElementById("stat-total");
@@ -818,11 +796,189 @@ function renderOverview() {
 
   const gpaBox = document.getElementById("stat-gpa");
   if (gpaBox) gpaBox.textContent = formatNumber(overall.gpa);
+
+  const counts = document.getElementById("stat-counts");
+  if (counts) {
+    counts.textContent = state.categories.length + " 个板块 / " + state.courses.length + " 门课程";
+  }
 }
 
-// ---- 事件 ----
+// ---- 板块④：决策板块 ----
+
+function renderDecision() {
+  const box = document.getElementById("overview");
+  if (!box) return;
+
+  box.innerHTML = "";
+
+  if (gapStats.length === 0) {
+    box.appendChild(makeEmpty(
+      "先创建板块并录入课程，这里会显示每个板块还差多少学分、以及建议优先选哪几门。"
+    ));
+    return;
+  }
+
+  gapStats.forEach(function (stat) {
+    const row = document.createElement("div");
+    row.className = "overview-row";
+
+    const head = document.createElement("div");
+    head.className = "card-head";
+
+    const name = document.createElement("strong");
+    name.className = "card-title";
+    name.textContent = stat.name;
+
+    const done = document.createElement("span");
+    done.className = "card-credits";
+    done.textContent = stat.requiredCredits === null
+      ? "已修 " + formatNumber(stat.doneCredits) + " 学分"
+      : "已修 " + formatNumber(stat.doneCredits) + " / 要求 " + formatNumber(stat.requiredCredits) + " 学分";
+
+    head.appendChild(name);
+    head.appendChild(done);
+
+    let message = "";
+
+    if (stat.requiredCredits === null) {
+      head.appendChild(makeBadge("要求未设置", "badge-planned"));
+      message = "这个板块还没填要求学分，暂时不参与缺口计算。补上要求学分后就能算出还差多少。";
+    } else if (stat.gap > 0) {
+      head.appendChild(makeBadge("还差 " + formatNumber(stat.gap) + " 学分", "badge-fail"));
+      message = "这个板块的课还要继续选，直到修满 " + formatNumber(stat.gap) + " 学分。";
+    } else {
+      const extra = stat.doneCredits - stat.requiredCredits;
+      head.appendChild(makeBadge("已修够", "badge-done"));
+      message = extra > 0
+        ? "已修够（超出 " + formatNumber(extra) + " 学分），这个板块的课不必再选。"
+        : "已修够，这个板块的课不必再选。";
+    }
+
+    row.appendChild(head);
+
+    const text = document.createElement("p");
+    text.className = "overview-message";
+    text.textContent = message;
+    row.appendChild(text);
+
+    if (stat.note) {
+      const note = document.createElement("p");
+      note.className = "card-note";
+      note.textContent = "特殊条件：" + stat.note;
+      row.appendChild(note);
+    }
+
+    const rec = buildRecommendation(stat);
+
+    if (rec) {
+      const planned = document.createElement("p");
+      planned.className = "overview-planned";
+
+      if (rec.level === "none") {
+        planned.textContent = "计划修课程：还没有登记 —— 先把打算修的课加到「② 课程板块」，这里就会给出建议。";
+      } else if (rec.enough) {
+        planned.classList.add("is-enough");
+        planned.textContent = "建议优先选：" + rec.picked.map(function (c) {
+          return c.name + "（" + c.credits + " 学分）";
+        }).join("、") + " —— 至少 " + rec.count + " 门即可补齐 " + formatNumber(stat.gap) + " 学分。";
+      } else {
+        planned.textContent = "建议优先选：" + rec.picked.map(function (c) {
+          return c.name + "（" + c.credits + " 学分）";
+        }).join("、") + " —— 合计只有 " + formatNumber(rec.sum) + " 学分，仍差 "
+          + formatNumber(rec.remaining) + " 学分，需要再补其它课程。";
+      }
+      row.appendChild(planned);
+    } else if (stat.plannedCourses.length > 0) {
+      const planned = document.createElement("p");
+      planned.className = "overview-planned";
+      planned.textContent = "计划修课程：" + stat.plannedCourses.map(function (c) {
+        return c.name + "（" + c.credits + " 学分）";
+      }).join("、") + " —— 这个板块已修够，可以不用选。";
+      row.appendChild(planned);
+    }
+
+    box.appendChild(row);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// 八、四种页面状态 + dev 工具（示例数据 / 状态预览）
+// ---------------------------------------------------------------------------
+
+function setSkeleton(on) {
+  const skeleton = document.getElementById("skeleton");
+  const layout = document.getElementById("layout");
+  if (skeleton) skeleton.hidden = !on;
+  if (layout) layout.hidden = on;
+}
+
+function showMockBanner(on) {
+  const banner = document.getElementById("mock-banner");
+  const loadBtn = document.getElementById("mock-load");
+  const clearBtn = document.getElementById("mock-clear");
+  if (banner) banner.hidden = !on;
+  if (loadBtn) loadBtn.hidden = on;
+  if (clearBtn) clearBtn.hidden = !on;
+}
+
+// 从本机存储读取真实数据并显示（成功态）
+function showRealData() {
+  const result = CreditPlanner.loadData();
+  state = result.data;
+  if (result.error) {
+    showGlobalError(result.error);
+  } else {
+    hideGlobalError();
+  }
+  setSkeleton(false);
+  renderAll();
+}
+
+function enterLoading() {
+  hideGlobalError();
+  setSkeleton(true);
+}
+
+// 切换四种状态；value 为 "" 表示回到正常显示
+function applyViewState(value) {
+  if (value === "loading") {
+    enterLoading();
+    return;
+  }
+
+  if (value === "empty") {
+    setSkeleton(false);
+    hideGlobalError();
+    state = CreditPlanner.emptyData();
+    renderAll();
+    return;
+  }
+
+  if (value === "error") {
+    setSkeleton(false);
+    state = CreditPlanner.emptyData();
+    renderAll();
+    showGlobalError("数据读取失败（内容可能已损坏，或本机存储不可用）。已保留原始内容的备份，当前显示为空数据。可以刷新页面重试。");
+    return;
+  }
+
+  setSkeleton(false);
+  if (mockMode) {
+    renderAll();
+    return;
+  }
+  showRealData();
+}
+
+// ---------------------------------------------------------------------------
+// 九、事件
+// ---------------------------------------------------------------------------
 
 function applyCategoryResult(result) {
+  if (mockMode) {
+    showError("category-error", "当前是示例数据，不能修改。请先点右上角「清除示例」。");
+    return false;
+  }
   if (!result.ok) {
     showError("category-error", result.error);
     return false;
@@ -836,6 +992,10 @@ function applyCategoryResult(result) {
 }
 
 function applyCourseResult(result) {
+  if (mockMode) {
+    showError("course-error", "当前是示例数据，不能修改。请先点右上角「清除示例」。");
+    return false;
+  }
   if (!result.ok) {
     showError("course-error", result.error);
     return false;
@@ -981,27 +1141,61 @@ function bindEvents() {
     });
   }
 
-  // GPA 换算规则切换
   const ruleSelect = document.getElementById("gpa-rule");
   if (ruleSelect) {
     ruleSelect.value = gpaRule;
     ruleSelect.addEventListener("change", function () {
       gpaRule = ruleSelect.value;
-      renderOverview();
+      renderGpa();
+    });
+  }
+
+  // dev：载入示例数据（只填页面，不落盘）
+  const mockLoad = document.getElementById("mock-load");
+  if (mockLoad) {
+    mockLoad.addEventListener("click", function () {
+      mockMode = true;
+      state = cloneData(MOCK_DATA);
+      editingId = null;
+      editingCourseId = null;
+      showMockBanner(true);
+      hideGlobalError();
+      setSkeleton(false);
+      const preview = document.getElementById("state-preview");
+      if (preview) preview.value = "";
+      renderAll();
+    });
+  }
+
+  // dev：清除示例，回到真实数据
+  const mockClear = document.getElementById("mock-clear");
+  if (mockClear) {
+    mockClear.addEventListener("click", function () {
+      mockMode = false;
+      showMockBanner(false);
+      const preview = document.getElementById("state-preview");
+      if (preview) preview.value = "";
+      showRealData();
+    });
+  }
+
+  // dev：状态预览
+  const statePreview = document.getElementById("state-preview");
+  if (statePreview) {
+    statePreview.addEventListener("change", function () {
+      applyViewState(statePreview.value);
     });
   }
 }
 
+// 页面加载：先显示"加载中"，再读数据并显示
 document.addEventListener("DOMContentLoaded", function () {
-  const result = CreditPlanner.loadData();
-  state = result.data;
-
-  if (result.error) {
-    showStorageError(result.error);
-  }
-
-  renderAll();
   bindEvents();
+  enterLoading();
+
+  window.setTimeout(function () {
+    showRealData();
+  }, 600);
 });
 
 window.CreditApp = {
@@ -1018,7 +1212,9 @@ window.CreditApp = {
   countsAsDoneCredits: countsAsDoneCredits,
   categoryNameOf: categoryNameOf,
   calcCategoryStats: calcCategoryStats,
+  buildRecommendation: buildRecommendation,
   calcOverall: calcOverall,
   gradePoint: gradePoint,
-  cloneData: cloneData
+  cloneData: cloneData,
+  MOCK_DATA: MOCK_DATA
 };

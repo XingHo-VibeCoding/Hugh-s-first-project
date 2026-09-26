@@ -380,6 +380,120 @@ const MOCK_DATA = {
   ]
 };
 
+// 示例数据 2 · 天文学专业（Day 10 追加）
+// 依据用户提供的 2025 版培养方案的真实模块与要求学分生成：
+//   通识必修（一）38 / 通识必修（二）3.5 / 通识选修 8 / 新生研讨 2
+//   学科基础 36 / 专业核心 27 / 专业选修 18 / 综合实践 14 / 个性发展（要求留空）
+// 92 门课（已修 63 / 计划修 29），含 8 门不及格、5 门免修、6 门 0.5 小数课、2 门未归类
+const MOCK_DATA_2 = {
+  version: 1,
+  categories: [
+    { id: "g1", name: "通识必修（一）", requiredCredits: 38, note: "" },
+    { id: "g2", name: "通识必修（二）", requiredCredits: 3.5, note: "" },
+    { id: "g3", name: "通识选修", requiredCredits: 8, note: "建议含美育类 2 学分" },
+    { id: "g4", name: "新生研讨", requiredCredits: 2, note: "" },
+    { id: "m1", name: "学科基础", requiredCredits: 36, note: "" },
+    { id: "m2", name: "专业核心", requiredCredits: 27, note: "" },
+    { id: "m3", name: "专业选修", requiredCredits: 18, note: "" },
+    { id: "m4", name: "综合实践", requiredCredits: 14, note: "" },
+    { id: "x1", name: "个性发展（要求待定）", requiredCredits: null, note: "" }
+  ],
+  courses: [
+    { id: "m2-0", name: "思想道德与法治", credits: 2.5, categoryId: "g1", status: "done", score: 50 },
+    { id: "m2-1", name: "马克思主义基本原理", credits: 2, categoryId: "g1", status: "done", score: 43 },
+    { id: "m2-2", name: "中国近现代史纲要", credits: 1, categoryId: "g1", status: "done", score: 55 },
+    { id: "m2-3", name: "毛泽东思想概论", credits: 3, categoryId: "g1", status: "done", score: 52 },
+    { id: "m2-4", name: "习近平新时代中国特色社会主义思想", credits: 3, categoryId: "g1", status: "done", score: null },
+    { id: "m2-5", name: "形势与政策（一）", credits: 2, categoryId: "g1", status: "done", score: null },
+    { id: "m2-6", name: "形势与政策（二）", credits: 1, categoryId: "g1", status: "done", score: null },
+    { id: "m2-7", name: "形势与政策（三）", credits: 2, categoryId: "g1", status: "done", score: 85 },
+    { id: "m2-8", name: "形势与政策（四）", credits: 3, categoryId: "g1", status: "done", score: 77 },
+    { id: "m2-9", name: "大学英语听说（1）", credits: 3, categoryId: "g1", status: "done", score: 66 },
+    { id: "m2-10", name: "大学英语听说（2）", credits: 3, categoryId: "g1", status: "done", score: 82 },
+    { id: "m2-11", name: "大学英语听说（3）", credits: 3, categoryId: "g1", status: "done", score: 72 },
+    { id: "m2-12", name: "大学英语读写（1）", credits: 3, categoryId: "g1", status: "done", score: 83 },
+    { id: "m2-13", name: "大学英语读写（2）", credits: 1, categoryId: "g1", status: "done", score: 40 },
+    { id: "m2-14", name: "大学英语读写（3）", credits: 3, categoryId: "g1", status: "done", score: 99 },
+    { id: "m2-15", name: "大学英语读写（4）", credits: 2, categoryId: "g1", status: "done", score: 87 },
+    { id: "m2-16", name: "通用学术英语听说", credits: 1, categoryId: "g1", status: "done", score: 76 },
+    { id: "m2-17", name: "通用学术英语读写", credits: 3, categoryId: "g1", status: "done", score: null },
+    { id: "m2-18", name: "高级英语（口译）", credits: 3, categoryId: "g1", status: "done", score: 74 },
+    { id: "m2-19", name: "高级英语（笔译）", credits: 2, categoryId: "g1", status: "done", score: 46 },
+    { id: "m2-20", name: "英语文学赏析", credits: 2, categoryId: "g1", status: "done", score: 79 },
+    { id: "m2-21", name: "旅游文化交流英语", credits: 1, categoryId: "g1", status: "done", score: 76 },
+    { id: "m2-22", name: "体育（一）", credits: 2, categoryId: "g1", status: "done", score: 77 },
+    { id: "m2-23", name: "体育（二）", credits: 3, categoryId: "g1", status: "done", score: null },
+    { id: "m2-24", name: "体育（三）", credits: 1, categoryId: "g1", status: "done", score: 61 },
+    { id: "m2-25", name: "体育（四）", credits: 2, categoryId: "g1", status: "done", score: 80 },
+    { id: "m2-26", name: "军事理论", credits: 2, categoryId: "g1", status: "planned", score: null },
+    { id: "m2-27", name: "大学生心理健康教育", credits: 2, categoryId: "g1", status: "planned", score: null },
+    { id: "m2-28", name: "人工智能通识", credits: 3, categoryId: "g1", status: "planned", score: null },
+    { id: "m2-29", name: "人工智能通识集中实践（理工农医类）", credits: 1, categoryId: "g1", status: "planned", score: null },
+    { id: "m2-30", name: "中文写作", credits: 1, categoryId: "g2", status: "done", score: 92 },
+    { id: "m2-31", name: "悦读计划", credits: 1, categoryId: "g2", status: "done", score: 79 },
+    { id: "m2-32", name: "国家安全教育", credits: 1, categoryId: "g2", status: "done", score: 82 },
+    { id: "m2-33", name: "音乐鉴赏", credits: 1.5, categoryId: "g3", status: "done", score: 82 },
+    { id: "m2-34", name: "美术鉴赏", credits: 1, categoryId: "g3", status: "done", score: 81 },
+    { id: "m2-35", name: "书法欣赏", credits: 2, categoryId: "g3", status: "done", score: 80 },
+    { id: "m2-36", name: "电影艺术赏析", credits: 2, categoryId: "g3", status: "planned", score: null },
+    { id: "m2-37", name: "戏剧鉴赏", credits: 1, categoryId: "g3", status: "planned", score: null },
+    { id: "m2-38", name: "中国诗词赏析", credits: 2, categoryId: "g3", status: "planned", score: null },
+    { id: "m2-39", name: "西方哲学史", credits: 1, categoryId: "g3", status: "planned", score: null },
+    { id: "m2-40", name: "中国传统文化", credits: 2, categoryId: "g3", status: "planned", score: null },
+    { id: "m2-41", name: "世界文明史", credits: 2, categoryId: "g3", status: "planned", score: null },
+    { id: "m2-42", name: "社会学导论", credits: 1, categoryId: "g3", status: "planned", score: null },
+    { id: "m2-43", name: "心理学与生活", credits: 2, categoryId: "g3", status: "planned", score: null },
+    { id: "m2-44", name: "经济学原理", credits: 1.5, categoryId: "g3", status: "planned", score: null },
+    { id: "m2-45", name: "法学基础", credits: 2, categoryId: "g3", status: "planned", score: null },
+    { id: "m2-46", name: "环境科学概论", credits: 2, categoryId: "g3", status: "planned", score: null },
+    { id: "m2-47", name: "生命科学导论", credits: 2, categoryId: "g3", status: "planned", score: null },
+    { id: "m2-48", name: "沟通与表达", credits: 1.5, categoryId: "g3", status: "planned", score: null },
+    { id: "m2-49", name: "新生研讨与职业生涯规划", credits: 2, categoryId: "g4", status: "done", score: 87 },
+    { id: "m2-50", name: "高等数学A（1）", credits: 3, categoryId: "m1", status: "done", score: 62 },
+    { id: "m2-51", name: "高等数学A（2）", credits: 3, categoryId: "m1", status: "done", score: 78 },
+    { id: "m2-52", name: "线性代数A", credits: 4, categoryId: "m1", status: "done", score: 80 },
+    { id: "m2-53", name: "概率论与数理统计", credits: 4, categoryId: "m1", status: "done", score: 40 },
+    { id: "m2-54", name: "大学物理A：力学", credits: 4, categoryId: "m1", status: "done", score: 71 },
+    { id: "m2-55", name: "大学物理A：热学", credits: 3, categoryId: "m1", status: "done", score: 74 },
+    { id: "m2-56", name: "大学物理A：光学", credits: 3, categoryId: "m1", status: "done", score: 91 },
+    { id: "m2-57", name: "大学物理A：电磁学", credits: 3, categoryId: "m1", status: "done", score: 79 },
+    { id: "m2-58", name: "大学物理A：原子物理学", credits: 3, categoryId: "m1", status: "done", score: 90 },
+    { id: "m2-59", name: "数学物理方法", credits: 3, categoryId: "m1", status: "done", score: 65 },
+    { id: "m2-60", name: "计算物理", credits: 3, categoryId: "m1", status: "done", score: 79 },
+    { id: "m2-61", name: "理论力学", credits: 4, categoryId: "m2", status: "done", score: 78 },
+    { id: "m2-62", name: "电动力学", credits: 4, categoryId: "m2", status: "done", score: 89 },
+    { id: "m2-63", name: "量子力学A", credits: 1.5, categoryId: "m2", status: "done", score: 82 },
+    { id: "m2-64", name: "热力学与统计物理", credits: 4, categoryId: "m2", status: "done", score: 80 },
+    { id: "m2-65", name: "天体物理导论（1）", credits: 4, categoryId: "m2", status: "done", score: 88 },
+    { id: "m2-66", name: "天体物理导论（2）", credits: 3, categoryId: "m2", status: "planned", score: null },
+    { id: "m2-67", name: "实测天体物理", credits: 4, categoryId: "m2", status: "planned", score: null },
+    { id: "m2-68", name: "数学物理方法（二）", credits: 3, categoryId: "m2", status: "planned", score: null },
+    { id: "m2-69", name: "星系宇宙学", credits: 3, categoryId: "m3", status: "done", score: 76 },
+    { id: "m2-70", name: "高能天体物理", credits: 2, categoryId: "m3", status: "done", score: 83 },
+    { id: "m2-71", name: "星际介质物理", credits: 3, categoryId: "m3", status: "planned", score: null },
+    { id: "m2-72", name: "等离子体天体物理", credits: 2, categoryId: "m3", status: "planned", score: null },
+    { id: "m2-73", name: "天体物理学", credits: 2, categoryId: "m3", status: "planned", score: null },
+    { id: "m2-74", name: "天体辐射机制", credits: 2, categoryId: "m3", status: "planned", score: null },
+    { id: "m2-75", name: "大学物理实验A（1）", credits: 1.5, categoryId: "m4", status: "done", score: 82 },
+    { id: "m2-76", name: "大学物理实验A（2）", credits: 2, categoryId: "m4", status: "done", score: 76 },
+    { id: "m2-77", name: "大学物理实验A（3）", credits: 1, categoryId: "m4", status: "done", score: 83 },
+    { id: "m2-78", name: "近代物理实验（1）", credits: 1, categoryId: "m4", status: "done", score: 69 },
+    { id: "m2-79", name: "近代物理实验（2）", credits: 1, categoryId: "m4", status: "done", score: 78 },
+    { id: "m2-80", name: "计算物理实验", credits: 2, categoryId: "m4", status: "done", score: 41 },
+    { id: "m2-81", name: "普通天文学实习", credits: 2, categoryId: "m4", status: "done", score: 70 },
+    { id: "m2-82", name: "实测天体物理实习", credits: 2, categoryId: "m4", status: "done", score: 78 },
+    { id: "m2-83", name: "科研训练", credits: 2, categoryId: "m4", status: "planned", score: null },
+    { id: "m2-84", name: "创新实验与研究", credits: 2, categoryId: "m4", status: "planned", score: null },
+    { id: "m2-85", name: "毕业实习与社会调查", credits: 1, categoryId: "m4", status: "planned", score: null },
+    { id: "m2-86", name: "跨学科选修：数据科学导论", credits: 2, categoryId: "x1", status: "done", score: 75 },
+    { id: "m2-87", name: "跨学科选修：科学史", credits: 2, categoryId: "x1", status: "planned", score: null },
+    { id: "m2-88", name: "天文学专业科研训练与创新实验研究（校级重点项目）", credits: 2, categoryId: "m3", status: "planned", score: null },
+    { id: "m2-89", name: "中华优秀传统文化经典研读与当代价值阐释（通识核心）", credits: 2, categoryId: "g3", status: "done", score: 86 },
+    { id: "m2-90", name: "通识类讲座（原板块已删除）", credits: 1, categoryId: "", status: "done", score: 82 },
+    { id: "m2-91", name: "跨院系研讨课（原板块已删除）", credits: 2, categoryId: "", status: "done", score: 74 }
+  ]
+};
+
 // ---------------------------------------------------------------------------
 // 七、渲染层
 // ---------------------------------------------------------------------------
@@ -1185,6 +1299,23 @@ function bindEvents() {
     });
   }
 
+  // dev：载入示例数据 2 · 天文学专业（92 门，用来压页面的真实规模）
+  const mockLoad2 = document.getElementById("mock2-load");
+  if (mockLoad2) {
+    mockLoad2.addEventListener("click", function () {
+      mockMode = true;
+      state = cloneData(MOCK_DATA_2);
+      editingId = null;
+      editingCourseId = null;
+      showMockBanner(true);
+      hideGlobalError();
+      setSkeleton(false);
+      const preview2 = document.getElementById("state-preview");
+      if (preview2) preview2.value = "";
+      renderAll();
+    });
+  }
+
   // dev：清除示例，回到真实数据
   const mockClear = document.getElementById("mock-clear");
   if (mockClear) {
@@ -1234,5 +1365,6 @@ window.CreditApp = {
   calcOverall: calcOverall,
   gradePoint: gradePoint,
   cloneData: cloneData,
-  MOCK_DATA: MOCK_DATA
+  MOCK_DATA: MOCK_DATA,
+  MOCK_DATA_2: MOCK_DATA_2
 };

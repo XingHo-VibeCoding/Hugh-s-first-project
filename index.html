@@ -8,27 +8,14 @@
 </head>
 <body>
   <header class="site-header">
-    <div class="header-text">
-      <h1>学分规划助手</h1>
-      <p class="subtitle">按板块算清"修够没有、还差多少"——哪些课必须选，哪些不必再选。</p>
-    </div>
-    <div class="dev-tools">
-      <button type="button" class="btn-ghost" id="mock-load">载入示例数据</button>
-      <button type="button" class="btn-ghost" id="mock-clear" hidden>清除示例</button>
-      <label class="dev-label" for="state-preview">状态预览</label>
-      <select id="state-preview">
-        <option value="">正常</option>
-        <option value="loading">加载中</option>
-        <option value="empty">空</option>
-        <option value="error">错误</option>
-      </select>
-    </div>
+    <h1>学分规划助手</h1>
+    <p class="subtitle">按板块算清"修够没有、还差多少"——哪些课必须选，哪些不必再选。</p>
   </header>
 
   <div class="page-body">
     <div class="banner banner-error" id="global-error" hidden></div>
     <div class="banner banner-mock" id="mock-banner" hidden>
-      当前显示的是<strong>示例数据</strong>，只填在页面上、不会保存；点右上角「清除示例」回到你自己的数据。
+      当前显示的是<strong>示例数据</strong>，只填在页面上、不会保存；点页面底部的「清除示例」回到你自己的数据。
     </div>
 
     <div class="skeleton-grid" id="skeleton" hidden>
@@ -95,7 +82,7 @@
           </div>
           <div class="number-item">
             <dt>已加载板块 / 课程</dt>
-            <dd id="stat-counts">—</dd>
+            <dd id="stat-counts" class="stat-text">—</dd>
           </div>
         </dl>
 
@@ -119,6 +106,21 @@
         <p class="future-note">二期计划：上传培养方案文件 / 图片，自动识别并填充板块与要求学分（一期不做）。</p>
       </section>
     </main>
+
+    <section class="dev-panel" id="dev-panel">
+      <p class="dev-title">开发者工具（演示页面状态与示例数据用，正式版本会移除）</p>
+      <div class="dev-tools">
+        <button type="button" class="btn-ghost" id="mock-load">载入示例数据</button>
+        <button type="button" class="btn-ghost" id="mock-clear" hidden>清除示例</button>
+        <label class="dev-label" for="state-preview">状态预览</label>
+        <select id="state-preview">
+          <option value="">正常</option>
+          <option value="loading">加载中</option>
+          <option value="empty">空</option>
+          <option value="error">错误</option>
+        </select>
+      </div>
+    </section>
   </div>
 
   <footer class="site-footer">

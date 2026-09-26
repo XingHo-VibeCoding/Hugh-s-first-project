@@ -431,6 +431,7 @@ function renderAll() {
   renderCourses();
   renderGpa();
   renderDecision();
+  syncFormButtons();
 }
 
 function makeButton(label, action, className) {
@@ -439,7 +440,24 @@ function makeButton(label, action, className) {
   btn.className = className;
   btn.dataset.action = action;
   btn.textContent = label;
+
+  // 示例数据模式下：除"取消"外，所有编辑类按钮一律禁用（Day 9）
+  // 以前是"点了才提示不能改"，现在改成"直接变灰点不动"，更接近正常产品
+  if (mockMode && action !== "cancel") {
+    btn.disabled = true;
+    btn.title = "示例数据模式下不能修改";
+  }
+
   return btn;
+}
+
+// 示例数据模式下，两个"添加"按钮也一起禁用
+function syncFormButtons() {
+  const buttons = document.querySelectorAll("#category-form button, #course-form button");
+  buttons.forEach(function (btn) {
+    btn.disabled = mockMode;
+    btn.title = mockMode ? "示例数据模式下不能添加" : "";
+  });
 }
 
 function makeBadge(text, className) {

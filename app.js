@@ -505,6 +505,8 @@ let gapStats = [];
 let gpaRule = "4.0";
 let mockMode = false;
 let lastAddedId = null;   // 刚刚新增的那一条，用来在列表里高亮一下（Day 11）
+let pendingDelete = null;       // 软删除待撤销：{ kind, id, item, index, name, timer, removed }
+let simulateDeleteFail = false; // 开发者开关：模拟删除提交失败，用于测试错误提示
 
 function showError(boxId, message) {
   const box = document.getElementById(boxId);
@@ -572,6 +574,135 @@ function persist() {
   if (!result.ok) {
     showGlobalError(result.message);
   }
+}
+
+// ---------------------------------------------------------------------------
+// 软删除 + 5 秒撤销（赏心悦目版）
+// 思路：点删除先播退出动画，再从内存移除并刷新页面，底部弹出撤销条；
+// 5 秒内点“撤销”可完整恢复；超时则真正保存；保存失败会自动恢复并提示。
+// ---------------------------------------------------------------------------
+
+function findItem(kind, id) {
+  if (kind === "course") return state.courses.find(function (c) { return c.id === id; });
+  return state.categories.find(function (c) { return c.id === id; });
+}
+
+function removeItem(kind, id) {
+  if (kind === "course") state = removeCourse(state, id).data;
+  else state = removeCategory(state, id).data;
+}
+
+function insertItem(kind, item, index) {
+  if (kind === "course") state.courses.splice(Math.min(index, state.courses.length), 0, item);
+  else state.categories.splice(Math.min(index, state.categories.length), 0, item);
+}
+
+function showUndoToast(pd) {
+  const toast = document.getElementById("undo-toast");
+  const text = document.getElementById("undo-text");
+  if (!toast || !text) return;
+  text.textContent = "已删除《" + pd.name + "》";
+  toast.hidden = false;
+  void toast.offsetWidth;            // 强制重排，过渡才会播放
+  toast.classList.add("is-visible");
+
+  const progress = document.getElementById("undo-progress");
+  if (progress) {
+    progress.style.transition = "none";
+    progress.style.width = "100%";
+    void progress.offsetWidth;
+    progress.style.transition = "width 5s linear";
+    progress.style.width = "0%";
+  }
+
+  pd.timer = window.setTimeout(function () { commitPending(false); }, 5000);
+}
+
+function hideUndoToast() {
+  const toast = document.getElementById("undo-toast");
+  if (!toast) return;
+  toast.classList.remove("is-visible");
+  const progress = document.getElementById("undo-progress");
+  if (progress) progress.style.transition = "none";
+  window.setTimeout(function () {
+    if (!toast.classList.contains("is-visible")) toast.hidden = true;
+  }, 280);
+}
+
+function showUndoError(message) {
+  const toast = document.getElementById("undo-toast");
+  const text = document.getElementById("undo-text");
+  if (!toast || !text) return;
+  text.textContent = message;
+  toast.hidden = false;
+  void toast.offsetWidth;
+  toast.classList.add("is-visible", "is-error");
+  window.setTimeout(function () {
+    toast.classList.remove("is-visible", "is-error");
+    window.setTimeout(function () { toast.hidden = true; }, 280);
+  }, 2600);
+}
+
+function commitSave(pd) {
+  const result = CreditPlanner.saveData(state);
+  if (!result.ok) {
+    insertItem(pd.kind, pd.item, pd.index);   // 真实保存失败：恢复并提示
+    renderAll();
+    showUndoError("删除未能保存到本机，已为你恢复。");
+    return false;
+  }
+  hideGlobalError();
+  return true;
+}
+
+function commitPending(silent) {
+  const pd = pendingDelete;
+  if (!pd) return;
+  if (pd.timer) { window.clearTimeout(pd.timer); pd.timer = null; }
+  if (!pd.removed) { removeItem(pd.kind, pd.id); pd.removed = true; }
+  hideUndoToast();
+  pendingDelete = null;
+
+  // 模拟失败（仅自然超时触发，第二次删除的 silent 提交不走这里）
+  if (!silent && simulateDeleteFail) {
+    insertItem(pd.kind, pd.item, pd.index);
+    renderAll();
+    showUndoError("删除失败，已为你恢复，请稍后重试。");
+    return;
+  }
+  commitSave(pd);
+}
+
+function undoDelete() {
+  const pd = pendingDelete;
+  if (!pd) return;
+  if (pd.timer) { window.clearTimeout(pd.timer); pd.timer = null; }
+  insertItem(pd.kind, pd.item, pd.index);
+  pendingDelete = null;
+  hideUndoToast();
+  renderAll();
+}
+
+function requestDelete(kind, id, cardEl) {
+  if (mockMode) return;                  // 示例数据模式下删除按钮本就禁用，双保险
+  if (pendingDelete) commitPending(true); // 已有待撤销的删除，先把上一个真正提交
+
+  const item = findItem(kind, id);
+  if (!item) return;
+  const list = (kind === "course") ? state.courses : state.categories;
+  const index = list.findIndex(function (x) { return x.id === id; });
+  const pd = { kind: kind, id: id, item: item, index: index, name: item.name, timer: null, removed: false };
+  pendingDelete = pd;
+
+  if (cardEl) cardEl.classList.add("removing");
+
+  window.setTimeout(function () {
+    if (pendingDelete !== pd) return;     // 已被新的删除取代，不再弹撤销
+    removeItem(kind, id);
+    pd.removed = true;
+    renderAll();
+    showUndoToast(pd);
+  }, 260);
 }
 
 function renderAll() {
@@ -1338,12 +1469,7 @@ function bindEvents() {
       }
 
       if (action === "delete") {
-        const affected = findCategoryCourses(state, id).length;
-        const message = affected > 0
-          ? "该板块下有 " + affected + " 门课程，删除后这些课程会变成“未归类”。确定删除？"
-          : "确定删除这个板块？";
-        if (!window.confirm(message)) return;
-        applyCategoryResult(removeCategory(state, id));
+        requestDelete("category", id, card);
       }
     });
   }
@@ -1441,8 +1567,7 @@ function bindEvents() {
       }
 
       if (action === "delete") {
-        if (!window.confirm("确定删除这门课程？")) return;
-        applyCourseResult(removeCourse(state, id));
+        requestDelete("course", id, card);
       }
     });
   }
@@ -1552,6 +1677,20 @@ function bindEvents() {
     statePreview.addEventListener("change", function () {
       applyViewState(statePreview.value);
     });
+  }
+
+  // dev：模拟删除提交失败（用于测试错误提示）
+  const simFailDelete = document.getElementById("sim-fail-delete");
+  if (simFailDelete) {
+    simFailDelete.addEventListener("change", function () {
+      simulateDeleteFail = simFailDelete.checked;
+    });
+  }
+
+  // 撤销条上的“撤销”按钮
+  const undoBtn = document.getElementById("undo-btn");
+  if (undoBtn) {
+    undoBtn.addEventListener("click", undoDelete);
   }
 }
 

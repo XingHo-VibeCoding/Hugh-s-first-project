@@ -735,3 +735,105 @@ select:disabled {
     min-height: 44px;
   }
 }
+
+/* ---------- 删除撤销条（赏心悦目版） ---------- */
+
+/* 卡片退场动画：点删除后先淡出并轻微右移缩小，再整体刷新 */
+.course-card.removing,
+.category-card.removing {
+  animation: card-out 0.26s ease forwards;
+  pointer-events: none;
+}
+
+@keyframes card-out {
+  to {
+    opacity: 0;
+    transform: translateX(10px) scale(0.98);
+  }
+}
+
+/* 底部撤销条：固定底部居中，深色拉通、白字 + 强调色“撤销” */
+.undo-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%) translateY(20px);
+  width: min(420px, calc(100% - 32px));
+  background: #2c2c2a;
+  color: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  opacity: 0;
+  transition: opacity 0.28s ease, transform 0.28s ease;
+  overflow: hidden;
+  z-index: 50;
+}
+
+.undo-toast.is-visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.undo-toast.is-error {
+  background: #a32d2d;
+}
+
+.undo-toast-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+}
+
+.undo-text {
+  flex: 1;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.undo-btn {
+  flex: none;
+  padding: 6px 14px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #7fb2e6;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.undo-btn:hover {
+  color: #a9cdee;
+}
+
+.undo-btn:focus-visible {
+  outline: 2px solid #7fb2e6;
+  outline-offset: 2px;
+}
+
+/* 5 秒倒计时进度条：从满到空 */
+.undo-progress {
+  display: block;
+  height: 3px;
+  width: 100%;
+  background: #7fb2e6;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .course-card.removing,
+  .category-card.removing {
+    animation: none;
+  }
+  .undo-toast {
+    transition: opacity 0.15s ease;
+    transform: translateX(-50%);
+  }
+  .undo-toast.is-visible {
+    transform: translateX(-50%);
+  }
+  .undo-progress {
+    transition: none !important;
+  }
+}

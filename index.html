@@ -129,6 +129,8 @@
           <option value="empty">空</option>
           <option value="error">错误</option>
         </select>
+        <label class="dev-label" for="sim-fail-delete">模拟删除失败</label>
+        <input type="checkbox" id="sim-fail-delete">
       </div>
     </section>
   </div>
@@ -136,6 +138,14 @@
   <footer class="site-footer">
     <p id="storage-notice">数据只保存在本机浏览器，不上传服务器。清理浏览器数据会丢失，请注意。</p>
   </footer>
+
+  <div class="undo-toast" id="undo-toast" role="status" aria-live="polite" hidden>
+    <div class="undo-toast-box">
+      <span class="undo-text" id="undo-text"></span>
+      <button type="button" class="undo-btn" id="undo-btn">撤销</button>
+    </div>
+    <span class="undo-progress" id="undo-progress"></span>
+  </div>
 
   <script src="store.js"></script>
   <script src="app.js"></script>

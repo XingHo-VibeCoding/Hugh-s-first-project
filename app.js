@@ -184,6 +184,163 @@ function validateCourse(input, data) {
   return { ok: true, error: "" };
 }
 
+// ---------------------------------------------------------------------------
+// 实时校验（Day 12·③）：边输入边提示，哪个框错了哪个框红
+// ---------------------------------------------------------------------------
+
+// 字段级错误字典：只针对单个字段可即时判定的规则，返回 { 字段键: 错误文案 }
+function liveErrorsCategory(input) {
+  const errors = {};
+  const name = (input.name || "").trim();
+  if (!name) errors.name = "请填写板块名称。";
+  else if (name.length > 20) errors.name = "板块名称请控制在 20 个字以内。";
+
+  if (input.requiredCredits !== null && input.requiredCredits !== undefined) {
+    const c = input.requiredCredits;
+    if (typeof c !== "number" || isNaN(c)) errors.credits = "要求学分请填数字（可留空）。";
+    else if (c <= 0) errors.credits = "要求学分要大于 0；不确定就留空。";
+    else if (Math.round(c * 2) !== c * 2) errors.credits = "要求学分需为 0.5 的整数倍（如 0.5 / 1.5 / 12）。";
+  }
+
+  if ((input.note || "").length > 100) errors.note = "特殊条件备注请控制在 100 个字以内。";
+  return errors;
+}
+
+function liveErrorsCourse(input, data) {
+  const errors = {};
+  const name = (input.name || "").trim();
+  if (!name) errors.name = "请填写课程名称。";
+  else if (name.length > 30) errors.name = "课程名称请控制在 30 个字以内。";
+
+  const credits = input.credits;
+  if (credits === null || credits === undefined || typeof credits !== "number" || isNaN(credits)) {
+    errors.credits = "请填写学分（可填 0.5 的整数倍，如 3 或 1.5）。";
+  } else if (credits <= 0) {
+    errors.credits = "学分要大于 0。";
+  } else if (Math.round(credits * 2) !== credits * 2) {
+    errors.credits = "学分需为 0.5 的整数倍（如 0.5 / 1.5 / 3）。";
+  }
+
+  if (!input.categoryId) errors.categoryId = "请选择所属板块。";
+  else {
+    const exists = data.categories.some(function (c) { return c.id === input.categoryId; });
+    if (!exists) errors.categoryId = "所属板块不存在，请先到“学分板块”里创建。";
+  }
+
+  if (input.status !== "done" && input.status !== "planned") {
+    errors.status = "请选择课程状态（已修 / 计划修）。";
+  }
+
+  const hasScore = input.score !== null && input.score !== undefined;
+  if (hasScore) {
+    if (input.status === "planned") errors.score = "计划修的课程先不用填成绩。";
+    else if (typeof input.score !== "number" || isNaN(input.score)) errors.score = "成绩请填数字（可留空）。";
+    else if (input.score < 0 || input.score > 100) errors.score = "成绩需在 0–100 之间。";
+    else if (Math.round(input.score) !== input.score) errors.score = "成绩请填整数。";
+  }
+  return errors;
+}
+
+// 记录每个表单的实时校验引用，供提交成功/失败时使用
+const liveForms = {};
+
+function setupLiveForm(cfg) {
+  const form = document.getElementById(cfg.formId);
+  if (!form) return;
+  const errorEl = document.getElementById(cfg.errorId);
+  const fieldEls = cfg.fields.map(function (f) { return document.getElementById(f.el); });
+
+  function refresh() {
+    const input = cfg.read();
+    const errors = cfg.validate(input, state);
+    let firstMsg = "";
+    cfg.fields.forEach(function (f, i) {
+      const el = fieldEls[i];
+      const msg = errors[f.key];
+      if (msg) {
+        el.classList.add("invalid");
+        el.setAttribute("aria-invalid", "true");
+        if (!firstMsg) firstMsg = msg;
+      } else {
+        el.classList.remove("invalid");
+        el.removeAttribute("aria-invalid");
+      }
+    });
+    if (errorEl) {
+      if (firstMsg) { errorEl.textContent = firstMsg; errorEl.hidden = false; }
+      else { errorEl.textContent = ""; errorEl.hidden = true; }
+    }
+  }
+
+  fieldEls.forEach(function (el) {
+    if (!el) return;
+    el.addEventListener("input", refresh);
+    el.addEventListener("change", refresh);
+  });
+
+  liveForms[cfg.formId] = { refresh: refresh, errorEl: errorEl, fieldEls: fieldEls };
+}
+
+function attachLiveValidation() {
+  setupLiveForm({
+    formId: "category-form",
+    errorId: "category-error",
+    fields: [
+      { el: "category-name", key: "name" },
+      { el: "category-credits", key: "credits" },
+      { el: "category-note", key: "note" }
+    ],
+    read: function () {
+      const creditsRaw = document.getElementById("category-credits").value.trim();
+      return {
+        name: document.getElementById("category-name").value,
+        requiredCredits: creditsRaw === "" ? null : Number(creditsRaw),
+        note: document.getElementById("category-note").value
+      };
+    },
+    validate: function (input) { return liveErrorsCategory(input); }
+  });
+
+  setupLiveForm({
+    formId: "course-form",
+    errorId: "course-error",
+    fields: [
+      { el: "course-name", key: "name" },
+      { el: "course-credits", key: "credits" },
+      { el: "course-category", key: "categoryId" },
+      { el: "course-status", key: "status" },
+      { el: "course-score", key: "score" }
+    ],
+    read: function () {
+      const creditsRaw = document.getElementById("course-credits").value.trim();
+      const scoreRaw = document.getElementById("course-score").value.trim();
+      const status = document.getElementById("course-status").value;
+      return {
+        name: document.getElementById("course-name").value,
+        credits: creditsRaw === "" ? null : Number(creditsRaw),
+        categoryId: document.getElementById("course-category").value,
+        status: status,
+        score: (status === "done" && scoreRaw !== "") ? Number(scoreRaw) : null
+      };
+    },
+    validate: function (input, data) { return liveErrorsCourse(input, data); }
+  });
+}
+
+function refreshLiveForm(formId) {
+  const f = liveForms[formId];
+  if (f) f.refresh();
+}
+
+function clearLiveValidation(formId) {
+  const f = liveForms[formId];
+  if (!f) return;
+  f.fieldEls.forEach(function (el) {
+    if (el) { el.classList.remove("invalid"); el.removeAttribute("aria-invalid"); }
+  });
+  if (f.errorEl) { f.errorEl.textContent = ""; f.errorEl.hidden = true; }
+}
+
 function buildCourseRecord(input) {
   const hasScore = input.score !== null && input.score !== undefined;
   return {
@@ -1398,6 +1555,7 @@ function applyCourseResult(result) {
 }
 
 function bindEvents() {
+  attachLiveValidation();
   const categoryForm = document.getElementById("category-form");
   if (categoryForm) {
     categoryForm.addEventListener("submit", function (event) {
@@ -1421,6 +1579,7 @@ function bindEvents() {
 
         if (!result.ok) {
           showError("category-error", result.error);
+          refreshLiveForm("category-form");
           return { ok: false, feedbackId: "category-feedback", message: "✕ " + result.error };
         }
 
@@ -1431,6 +1590,7 @@ function bindEvents() {
         const added = state.categories[state.categories.length - 1];
         lastAddedId = added.id;
         categoryForm.reset();
+        clearLiveValidation("category-form");
         renderAll();
         lastAddedId = null;
 
@@ -1515,6 +1675,7 @@ function bindEvents() {
 
         if (!result.ok) {
           showError("course-error", result.error);
+          refreshLiveForm("course-form");
           return { ok: false, feedbackId: "course-feedback", message: "✕ " + result.error };
         }
 
@@ -1525,6 +1686,7 @@ function bindEvents() {
         const added = state.courses[state.courses.length - 1];
         lastAddedId = added.id;
         courseForm.reset();
+        clearLiveValidation("course-form");
         renderCategoryOptions();
         renderAll();
         lastAddedId = null;

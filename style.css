@@ -358,6 +358,16 @@ select:disabled {
   animation: feedback-in 0.22s ease-out;
 }
 
+/* 实时校验：字段自身标红（Day 12·③），与错误区红字呼应 */
+.form-row input.invalid,
+.form-row select.invalid,
+.edit-fields input.invalid,
+.edit-fields select.invalid {
+  border-color: var(--danger-border);
+  background: #fff6f6;
+  box-shadow: 0 0 0 2px rgba(190, 30, 30, 0.12);
+}
+
 /* 复制结论那一行的排布与备用文本框（Day 11） */
 .copy-row {
   display: flex;

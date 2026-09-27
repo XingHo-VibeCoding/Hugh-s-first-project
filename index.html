@@ -37,6 +37,7 @@
           <button type="submit" class="btn">添加板块</button>
         </form>
         <p class="form-error" id="category-error" hidden></p>
+        <p class="form-feedback" id="category-feedback" hidden></p>
 
         <div class="list" id="category-list"></div>
       </section>
@@ -59,6 +60,7 @@
           <button type="submit" class="btn">添加课程</button>
         </form>
         <p class="form-error" id="course-error" hidden></p>
+        <p class="form-feedback" id="course-feedback" hidden></p>
 
         <div class="list" id="course-list"></div>
       </section>
@@ -102,6 +104,13 @@
         <p class="hint">每个板块还差多少学分、哪些板块的课不必再选、下一步建议优先选哪几门。</p>
 
         <div class="overview" id="overview"></div>
+
+        <div class="copy-row">
+          <button type="button" class="btn-ghost" id="copy-summary">复制我的进度结论</button>
+          <span class="copy-hint">复制成一段文字，方便发给同学或存进备忘录</span>
+        </div>
+        <p class="form-feedback" id="copy-feedback" hidden></p>
+        <textarea class="copy-fallback" id="copy-fallback" rows="5" readonly hidden></textarea>
 
         <p class="future-note">二期计划：上传培养方案文件 / 图片，自动识别并填充板块与要求学分（一期不做）。</p>
       </section>

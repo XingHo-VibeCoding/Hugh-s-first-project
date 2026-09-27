@@ -346,6 +346,7 @@ select:disabled {
   cursor: not-allowed;
 }
 
+/* 校验失败时的常驻红字：要留在页面上让用户照着改，所以不自动消失 */
 .form-error {
   margin: 0 0 8px;
   padding: 8px 12px;
@@ -353,6 +354,89 @@ select:disabled {
   background: var(--danger-bg);
   color: var(--danger-text);
   font-size: 13px;
+  border: 1px solid var(--danger-border);
+  animation: feedback-in 0.22s ease-out;
+}
+
+/* 复制结论那一行的排布与备用文本框（Day 11） */
+.copy-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.copy-hint {
+  font-size: 12px;
+  color: var(--text-hint);
+}
+
+.copy-fallback {
+  width: 100%;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-main);
+  background: #ffffff;
+  resize: vertical;
+}
+
+/* 操作反馈提示（Day 11）：放在表单下方，出现时淡入并轻微上移 */
+.form-feedback {
+  margin: 0 0 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  border: 1px solid transparent;
+  animation: feedback-in 0.22s ease-out;
+}
+
+.form-feedback.is-ok {
+  background: var(--ok-bg);
+  color: var(--ok-text);
+  border-color: #9fe1cb;
+}
+
+.form-feedback.is-fail {
+  background: var(--danger-bg);
+  color: var(--danger-text);
+  border-color: var(--danger-border);
+}
+
+@keyframes feedback-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* 刚新增的卡片：底色闪一下再淡回，让用户一眼看到"加在哪儿了" */
+.is-new {
+  animation: card-flash 1.2s ease-out;
+}
+
+@keyframes card-flash {
+  0% {
+    background: #e6f1fb;
+    border-color: #85b7eb;
+  }
+  60% {
+    background: #e6f1fb;
+    border-color: #85b7eb;
+  }
+  100% {
+    background: var(--bg-soft);
+    border-color: var(--border);
+  }
 }
 
 /* ---------- 列表与卡片 ---------- */

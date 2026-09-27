@@ -504,6 +504,7 @@ let editingCourseId = null;
 let gapStats = [];
 let gpaRule = "4.0";
 let mockMode = false;
+let lastAddedId = null;   // 刚刚新增的那一条，用来在列表里高亮一下（Day 11）
 
 function showError(boxId, message) {
   const box = document.getElementById(boxId);
@@ -531,6 +532,41 @@ function hideGlobalError() {
   box.hidden = true;
 }
 
+// 操作反馈：在表单下方显示一条短暂提示（成功绿 / 失败红），1.8 秒后自动收起
+// 放在表单下方而不是页面顶部，因为此刻用户的眼睛就在表单上
+function showFeedback(boxId, message, ok) {
+  const box = document.getElementById(boxId);
+  if (!box) return;
+  box.textContent = message;
+  box.className = "form-feedback " + (ok ? "is-ok" : "is-fail");
+  box.hidden = false;
+
+  window.setTimeout(function () {
+    box.hidden = true;
+  }, 1800);
+}
+
+// 提交时先进入"处理中"：按钮禁用并改文案，防止连点重复提交
+// work() 返回 { ok, message, feedbackId }，结束后恢复按钮并给出提示
+function runSubmit(button, idleText, work) {
+  if (button.disabled) return;          // 已经在处理中，忽略后续点击
+  button.disabled = true;
+  button.textContent = "添加中…";
+
+  // 本机存储写入是瞬时的，留一点点时间让"处理中"这个状态真的能被看到
+  window.setTimeout(function () {
+    const outcome = work();
+    button.disabled = false;
+    button.textContent = idleText;
+
+    // 成功才有"一闪而过"的提示；失败时保留表单下方那条常驻红字，
+    // 因为用户要照着它改，一闪就没了反而不好（避免两条红字重复出现）
+    if (outcome.ok) {
+      showFeedback(outcome.feedbackId, outcome.message, true);
+    }
+  }, 180);
+}
+
 function persist() {
   const result = CreditPlanner.saveData(state);
   if (!result.ok) {
@@ -546,6 +582,14 @@ function renderAll() {
   renderGpa();
   renderDecision();
   syncFormButtons();
+  syncCopyButton();
+}
+
+// 没有板块时可以复制的内容是空的，先把按钮禁掉（Day 11）
+function syncCopyButton() {
+  const btn = document.getElementById("copy-summary");
+  if (!btn) return;
+  btn.disabled = gapStats.length === 0;
 }
 
 function makeButton(label, action, className) {
@@ -606,6 +650,11 @@ function buildCategoryCard(category) {
   const card = document.createElement("div");
   card.className = "category-card";
   card.dataset.id = category.id;
+
+  // 刚新增的那一条高亮一下，让"加在哪儿了"这件事看得见（Day 11）
+  if (category.id === lastAddedId) {
+    card.classList.add("is-new");
+  }
 
   const head = document.createElement("div");
   head.className = "card-head";
@@ -747,6 +796,11 @@ function buildCourseCard(course) {
   const card = document.createElement("div");
   card.className = "course-card";
   card.dataset.id = course.id;
+
+  // 刚新增的那一条高亮一下（Day 11）
+  if (course.id === lastAddedId) {
+    card.classList.add("is-new");
+  }
 
   const head = document.createElement("div");
   head.className = "card-head";
@@ -936,6 +990,78 @@ function renderGpa() {
 }
 
 // ---- 板块④：决策板块 ----
+
+// 把当前进度整理成一段可复制、可分享的文字（Day 11）
+// 纯函数：输入数据 + 已算好的板块统计，输出字符串，方便单独测试
+function buildSummaryText(data, stats) {
+  const lines = [];
+  const overall = calcOverall(data, gpaRule);
+
+  lines.push("学分规划助手 · 我的学分进度");
+  lines.push("已修总学分 " + formatNumber(overall.totalCredits)
+    + "｜加权平均分 " + formatNumber(overall.weightedAvg)
+    + "｜GPA " + formatNumber(overall.gpa) + "（" + gpaRule + " 制）");
+  lines.push("");
+
+  stats.forEach(function (stat) {
+    let line = "【" + stat.name + "】已修 " + formatNumber(stat.doneCredits);
+
+    if (stat.requiredCredits === null) {
+      line += " 学分（要求学分未设置，暂不计算缺口）";
+    } else {
+      line += " / 要求 " + formatNumber(stat.requiredCredits) + " 学分";
+
+      if (stat.gap > 0) {
+        line += " → 还差 " + formatNumber(stat.gap) + " 学分";
+        const rec = buildRecommendation(stat);
+        if (rec) {
+          if (rec.level === "none") {
+            line += "（还没登记这个板块的计划修课程）";
+          } else if (rec.enough) {
+            line += "，建议优先选：" + rec.picked.map(function (c) { return c.name; }).join("、")
+              + "（至少 " + rec.count + " 门即可补齐）";
+          } else {
+            line += "，计划修课程加起来仍差 " + formatNumber(rec.remaining) + " 学分";
+          }
+        }
+      } else {
+        const extra = stat.doneCredits - stat.requiredCredits;
+        line += " → 已修够";
+        if (extra > 0) {
+          line += "（超出 " + formatNumber(extra) + " 学分）";
+        }
+      }
+    }
+
+    lines.push(line);
+
+    if (stat.note) {
+      lines.push("　特殊条件：" + stat.note);
+    }
+  });
+
+  lines.push("");
+  lines.push("（数据仅保存在本机浏览器，未上传服务器）");
+
+  return lines.join("\n");
+}
+
+// 老办法复制：临时塞一个看不见的文本框，选中后执行复制命令
+function legacyCopy(text) {
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.top = "-1000px";
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    return ok;
+  } catch (err) {
+    return false;
+  }
+}
 
 function renderDecision() {
   const box = document.getElementById("overview");
@@ -1145,16 +1271,40 @@ function bindEvents() {
   if (categoryForm) {
     categoryForm.addEventListener("submit", function (event) {
       event.preventDefault();
-      const creditsRaw = document.getElementById("category-credits").value.trim();
-      const input = {
-        name: document.getElementById("category-name").value,
-        requiredCredits: creditsRaw === "" ? null : Number(creditsRaw),
-        note: document.getElementById("category-note").value
-      };
 
-      if (applyCategoryResult(addCategory(state, input))) {
-        categoryForm.reset();
+      if (mockMode) {
+        showError("category-error", "当前是示例数据，不能修改。请先点页面底部「清除示例」。");
+        return;
       }
+
+      const submitBtn = categoryForm.querySelector('button[type="submit"]');
+      runSubmit(submitBtn, "添加板块", function () {
+        const creditsRaw = document.getElementById("category-credits").value.trim();
+        const input = {
+          name: document.getElementById("category-name").value,
+          requiredCredits: creditsRaw === "" ? null : Number(creditsRaw),
+          note: document.getElementById("category-note").value
+        };
+
+        const result = addCategory(state, input);
+
+        if (!result.ok) {
+          showError("category-error", result.error);
+          return { ok: false, feedbackId: "category-feedback", message: "✕ " + result.error };
+        }
+
+        state = result.data;
+        persist();
+        showError("category-error", "");
+
+        const added = state.categories[state.categories.length - 1];
+        lastAddedId = added.id;
+        categoryForm.reset();
+        renderAll();
+        lastAddedId = null;
+
+        return { ok: true, feedbackId: "category-feedback", message: "✓ 已添加板块：" + added.name };
+      });
     });
   }
 
@@ -1215,25 +1365,49 @@ function bindEvents() {
   if (courseForm) {
     courseForm.addEventListener("submit", function (event) {
       event.preventDefault();
-      const creditsRaw = document.getElementById("course-credits").value.trim();
-      const scoreRaw = document.getElementById("course-score").value.trim();
-      const status = document.getElementById("course-status").value;
 
-      const input = {
-        name: document.getElementById("course-name").value,
-        credits: creditsRaw === "" ? null : Number(creditsRaw),
-        categoryId: document.getElementById("course-category").value,
-        status: status,
-        score: (status === "done" && scoreRaw !== "") ? Number(scoreRaw) : null
-      };
+      if (mockMode) {
+        showError("course-error", "当前是示例数据，不能修改。请先点页面底部「清除示例」。");
+        return;
+      }
 
-      if (applyCourseResult(addCourse(state, input))) {
+      const submitBtn = courseForm.querySelector('button[type="submit"]');
+      runSubmit(submitBtn, "添加课程", function () {
+        const creditsRaw = document.getElementById("course-credits").value.trim();
+        const scoreRaw = document.getElementById("course-score").value.trim();
+        const status = document.getElementById("course-status").value;
+
+        const input = {
+          name: document.getElementById("course-name").value,
+          credits: creditsRaw === "" ? null : Number(creditsRaw),
+          categoryId: document.getElementById("course-category").value,
+          status: status,
+          score: (status === "done" && scoreRaw !== "") ? Number(scoreRaw) : null
+        };
+
+        const result = addCourse(state, input);
+
+        if (!result.ok) {
+          showError("course-error", result.error);
+          return { ok: false, feedbackId: "course-feedback", message: "✕ " + result.error };
+        }
+
+        state = result.data;
+        persist();
+        showError("course-error", "");
+
+        const added = state.courses[state.courses.length - 1];
+        lastAddedId = added.id;
         courseForm.reset();
         renderCategoryOptions();
+        renderAll();
+        lastAddedId = null;
         if (statusInput && scoreInput) {
           scoreInput.disabled = statusInput.value !== "done";
         }
-      }
+
+        return { ok: true, feedbackId: "course-feedback", message: "✓ 已添加课程：" + added.name };
+      });
     });
   }
 
@@ -1279,6 +1453,50 @@ function bindEvents() {
     ruleSelect.addEventListener("change", function () {
       gpaRule = ruleSelect.value;
       renderGpa();
+    });
+  }
+
+  // 交互 B：复制进度结论（Day 11）
+  // 处理中：按钮禁用并改文案；成功：按钮变"✓ 已复制"；失败：给出一个可手动复制的文本框
+  const copyBtn = document.getElementById("copy-summary");
+  const copyFallback = document.getElementById("copy-fallback");
+  if (copyBtn) {
+    copyBtn.addEventListener("click", function () {
+      if (copyBtn.disabled) return;
+
+      const text = buildSummaryText(state, gapStats);
+      const idleText = copyBtn.textContent;
+      copyBtn.disabled = true;
+      copyBtn.textContent = "复制中…";
+
+      const finish = function (ok) {
+        copyBtn.disabled = false;
+        if (ok) {
+          copyBtn.textContent = "✓ 已复制";
+          showFeedback("copy-feedback", "✓ 已复制到剪贴板（共 " + text.length + " 个字符）", true);
+          window.setTimeout(function () {
+            copyBtn.textContent = idleText;
+          }, 1500);
+          if (copyFallback) copyFallback.hidden = true;
+        } else {
+          copyBtn.textContent = idleText;
+          showFeedback("copy-feedback", "✕ 浏览器不允许自动复制，请从下面的框里手动复制", false);
+          if (copyFallback) {
+            copyFallback.hidden = false;
+            copyFallback.value = text;
+            copyFallback.focus();
+            copyFallback.select();
+          }
+        }
+      };
+
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text)
+          .then(function () { finish(true); })
+          .catch(function () { finish(legacyCopy(text)); });
+      } else {
+        finish(legacyCopy(text));
+      }
     });
   }
 
@@ -1365,6 +1583,7 @@ window.CreditApp = {
   calcOverall: calcOverall,
   gradePoint: gradePoint,
   cloneData: cloneData,
+  buildSummaryText: buildSummaryText,
   MOCK_DATA: MOCK_DATA,
   MOCK_DATA_2: MOCK_DATA_2
 };

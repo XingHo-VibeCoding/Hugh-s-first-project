@@ -62,6 +62,20 @@
         <p class="form-error" id="course-error" hidden></p>
         <p class="form-feedback" id="course-feedback" hidden></p>
 
+        <div class="filter-row" id="course-filter">
+          <input type="text" id="filter-keyword" placeholder="搜课程关键词" aria-label="按关键词筛选课程">
+          <select id="filter-category" aria-label="按板块筛选课程">
+            <option value="">全部板块</option>
+          </select>
+          <select id="filter-status" aria-label="按状态筛选课程">
+            <option value="">全部状态</option>
+            <option value="done">已修</option>
+            <option value="planned">计划修</option>
+          </select>
+          <button type="button" class="btn-ghost" id="filter-clear">清空筛选</button>
+        </div>
+        <p class="filter-empty" id="filter-empty" hidden></p>
+
         <div class="list" id="course-list"></div>
       </section>
 

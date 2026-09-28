@@ -664,6 +664,7 @@ let mockMode = false;
 let lastAddedId = null;   // 刚刚新增的那一条，用来在列表里高亮一下（Day 11）
 let pendingDelete = null;       // 软删除待撤销：{ kind, id, item, index, name, timer, removed }
 let simulateDeleteFail = false; // 开发者开关：模拟删除提交失败，用于测试错误提示
+let courseFilter = { keyword: "", categoryId: "", status: "" }; // 课程列表筛选（Day 12，只影响显示不改数据）
 
 function showError(boxId, message) {
   const box = document.getElementById(boxId);
@@ -1210,6 +1211,27 @@ function readCourseEditCard(card) {
   };
 }
 
+// 课程筛选（Day 12）：按关键词 / 板块 / 状态过滤，只影响显示，不改数据
+function filterCourses(courses, filter) {
+  const keyword = (filter.keyword || "").trim().toLowerCase();
+  return courses.filter(function (course) {
+    if (keyword && course.name.toLowerCase().indexOf(keyword) === -1) return false;
+    if (filter.categoryId && course.categoryId !== filter.categoryId) return false;
+    if (filter.status && course.status !== filter.status) return false;
+    return true;
+  });
+}
+
+function resetCourseFilter() {
+  courseFilter = { keyword: "", categoryId: "", status: "" };
+  const keywordEl = document.getElementById("filter-keyword");
+  const categoryEl = document.getElementById("filter-category");
+  const statusEl = document.getElementById("filter-status");
+  if (keywordEl) keywordEl.value = "";
+  if (categoryEl) categoryEl.value = "";
+  if (statusEl) statusEl.value = "";
+}
+
 function renderCourses() {
   const list = document.getElementById("course-list");
   if (!list) return;
@@ -1217,6 +1239,8 @@ function renderCourses() {
   list.innerHTML = "";
 
   if (state.courses.length === 0) {
+    const emptyBox0 = document.getElementById("filter-empty");
+    if (emptyBox0) emptyBox0.hidden = true;
     list.appendChild(makeEmpty(
       state.categories.length === 0
         ? "先在左边「学分板块」创建板块，再回来录课程。"
@@ -1225,7 +1249,20 @@ function renderCourses() {
     return;
   }
 
-  state.courses.forEach(function (course) {
+  const visible = filterCourses(state.courses, courseFilter);
+  const emptyBox = document.getElementById("filter-empty");
+
+  if (visible.length === 0) {
+    // 有数据但被筛没了：行内空态，说清被隐藏了多少、怎么恢复（Day 12）
+    if (emptyBox) {
+      emptyBox.textContent = "没有匹配的课程（现有 " + state.courses.length + " 门都被筛掉了）。换个关键词，或点上面的「清空筛选」。";
+      emptyBox.hidden = false;
+    }
+    return;
+  }
+  if (emptyBox) emptyBox.hidden = true;
+
+  visible.forEach(function (course) {
     if (course.id === editingCourseId) {
       list.appendChild(buildCourseEditCard(course));
     } else {
@@ -1255,6 +1292,26 @@ function renderCategoryOptions() {
 
   const stillExists = state.categories.some(function (c) { return c.id === previous; });
   select.value = stillExists ? previous : "";
+
+  // 同步筛选行的板块下拉（Day 12）：选项跟随板块列表，保留当前筛选选择
+  const filterSelect = document.getElementById("filter-category");
+  if (filterSelect) {
+    const prevFilter = courseFilter.categoryId;
+    filterSelect.innerHTML = "";
+    const allOption = document.createElement("option");
+    allOption.value = "";
+    allOption.textContent = "全部板块";
+    filterSelect.appendChild(allOption);
+    state.categories.forEach(function (category) {
+      const option = document.createElement("option");
+      option.value = category.id;
+      option.textContent = category.name;
+      filterSelect.appendChild(option);
+    });
+    const filterStillExists = state.categories.some(function (c) { return c.id === prevFilter; });
+    filterSelect.value = filterStillExists ? prevFilter : "";
+    if (!filterStillExists) courseFilter.categoryId = "";
+  }
 }
 
 // ---- 板块③：绩点板块 ----
@@ -1687,6 +1744,7 @@ function bindEvents() {
         lastAddedId = added.id;
         courseForm.reset();
         clearLiveValidation("course-form");
+        resetCourseFilter(); // 新加的课程要立刻可见：清掉筛选再渲染（Day 12）
         renderCategoryOptions();
         renderAll();
         lastAddedId = null;
@@ -1696,6 +1754,31 @@ function bindEvents() {
 
         return { ok: true, feedbackId: "course-feedback", message: "✓ 已添加课程：" + added.name };
       });
+    });
+  }
+
+  // 课程筛选（Day 12）：输入即过滤，只动显示不动数据；清空一键恢复
+  const filterKeyword = document.getElementById("filter-keyword");
+  const filterCategory = document.getElementById("filter-category");
+  const filterStatus = document.getElementById("filter-status");
+  const filterClear = document.getElementById("filter-clear");
+
+  const applyCourseFilter = function () {
+    courseFilter.keyword = filterKeyword ? filterKeyword.value : "";
+    courseFilter.categoryId = filterCategory ? filterCategory.value : "";
+    courseFilter.status = filterStatus ? filterStatus.value : "";
+    renderCourses();
+  };
+
+  if (filterKeyword) filterKeyword.addEventListener("input", applyCourseFilter);
+  if (filterCategory) filterCategory.addEventListener("change", applyCourseFilter);
+  if (filterStatus) filterStatus.addEventListener("change", applyCourseFilter);
+
+  if (filterClear) {
+    filterClear.addEventListener("click", function () {
+      resetCourseFilter();
+      renderCourses();
+      if (filterKeyword) filterKeyword.focus();
     });
   }
 

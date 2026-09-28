@@ -16,3 +16,6 @@ Desktop.ini
 .DS_Store
 .vscode/
 *.log
+
+# ---- 本地临时文件（测试桩、一次性脚本）----
+.workbuddy/tmp/

@@ -368,6 +368,46 @@ select:disabled {
   box-shadow: 0 0 0 2px rgba(190, 30, 30, 0.12);
 }
 
+/* 课程筛选行（Day 12）：输入即过滤，清空一键恢复 */
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+
+.filter-row input,
+.filter-row select {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 13px;
+  background: #ffffff;
+}
+
+.filter-row input {
+  flex: 1 1 150px;
+  min-width: 0;
+}
+
+.filter-row input:focus,
+.filter-row select:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* 筛选无结果的行内空态：与页面级空态区分，弱化但可读 */
+.filter-empty {
+  margin: 0 0 8px;
+  padding: 8px 12px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  background: var(--bg-soft);
+  color: var(--text-soft);
+  font-size: 13px;
+}
+
 /* 复制结论那一行的排布与备用文本框（Day 11） */
 .copy-row {
   display: flex;

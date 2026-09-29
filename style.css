@@ -508,6 +508,48 @@ select:disabled {
   margin-top: 12px;
 }
 
+/* 板块详情页（Day 13） */
+.detail-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.detail-label {
+  display: block;
+  color: var(--text-hint);
+  font-size: 13px;
+}
+
+.detail-value {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-main);
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.detail-course {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.detail-course-name {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.detail-course-meta {
+  color: var(--text-hint);
+  font-size: 13px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .list-skeleton-card {
     animation: none;
@@ -853,7 +895,8 @@ select:disabled {
 
   .layout,
   .view-grid,
-  .skeleton-grid {
+  .skeleton-grid,
+  .detail-summary {
     grid-template-columns: minmax(0, 1fr);
   }
 

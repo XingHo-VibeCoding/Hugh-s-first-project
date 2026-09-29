@@ -868,39 +868,59 @@ function requestDelete(kind, id, cardEl) {
 // ---------------------------------------------------------------------------
 
 let currentView = "dashboard";   // 当前显示的视图
+let currentDetailId = "";        // 详情页对应的板块 id（#/category/<id>）
 let listStateOverride = "";      // 开发者开关：强制列表呈现某状态（"" = 跟随真实数据）
 
 const VIEW_MAP = {
   dashboard: { el: "view-dashboard", title: "概览", crumb: "首页 › 概览" },
   courses: { el: "view-courses", title: "课程管理", crumb: "首页 › 课程管理" },
-  categories: { el: "view-categories", title: "学分板块", crumb: "首页 › 学分板块" }
+  categories: { el: "view-categories", title: "学分板块", crumb: "首页 › 学分板块" },
+  detail: { el: "view-category-detail", title: "板块详情", crumb: "首页 › 学分板块 › 板块详情" }
 };
 
-// 从 #/xxx 解析出视图名；地址栏没写或写错时，一律回概览
+// 解析 #/xxx 或带参数的 #/category/<id>；地址栏没写或写错时，一律回概览
 function parseHash() {
-  const raw = (window.location.hash || "").replace(/^#\/?/, "").trim().toLowerCase();
-  return VIEW_MAP[raw] ? raw : "dashboard";
+  const raw = (window.location.hash || "").replace(/^#\/?/, "").trim();
+  const parts = raw.split("/").filter(function (p) { return p !== ""; });
+  if (parts.length === 0) return { view: "dashboard", id: "" };
+
+  const head = parts[0].toLowerCase();
+  if ((head === "category" || head === "categories") && parts[1]) {
+    return { view: "detail", id: parts[1] }; // id 保留原样，不做大小写转换
+  }
+  // 写了 #/category 却没带 id：退回板块列表，而不是把人扔回概览
+  if (head === "category") return { view: "categories", id: "" };
+  return { view: VIEW_MAP[head] ? head : "dashboard", id: "" };
 }
 
-function showView(key, opts) {
+function showView(target, opts) {
+  const t = target || { view: "dashboard", id: "" };
   const withLoading = !!(opts && opts.loading);
-  currentView = VIEW_MAP[key] ? key : "dashboard";
+  currentView = VIEW_MAP[t.view] ? t.view : "dashboard";
+  currentDetailId = currentView === "detail" ? (t.id || "") : "";
 
   Object.keys(VIEW_MAP).forEach(function (k) {
     const el = document.getElementById(VIEW_MAP[k].el);
     if (el) el.hidden = (k !== currentView);
   });
 
+  // 详情属于「板块」这一支，导航高亮仍落在「板块」上
+  const navKey = currentView === "detail" ? "categories" : currentView;
   const links = document.querySelectorAll(".nav-link");
   links.forEach(function (link) {
-    const active = link.dataset.view === currentView;
+    const active = link.dataset.view === navKey;
     if (active) link.setAttribute("aria-current", "page");
     else link.removeAttribute("aria-current");
     link.classList.toggle("is-active", active);
   });
 
-  const crumb = document.getElementById("breadcrumb");
-  if (crumb) crumb.textContent = VIEW_MAP[currentView].crumb;
+  let crumb = VIEW_MAP[currentView].crumb;
+  if (currentView === "detail") {
+    const found = state.categories.filter(function (c) { return c.id === currentDetailId; })[0];
+    if (found) crumb = "首页 › 学分板块 › " + found.name;
+  }
+  const crumbEl = document.getElementById("breadcrumb");
+  if (crumbEl) crumbEl.textContent = crumb;
   document.title = VIEW_MAP[currentView].title + "｜学分规划助手";
 
   if (withLoading) viewListLoading();
@@ -971,6 +991,7 @@ function renderAll() {
   renderCategoryOptions();
   renderCategories();
   renderCourses();
+  renderDetail();
   renderGpa();
   renderDecision();
   syncFormButtons();
@@ -991,9 +1012,9 @@ function makeButton(label, action, className) {
   btn.dataset.action = action;
   btn.textContent = label;
 
-  // 示例数据模式下：除"取消"外，所有编辑类按钮一律禁用（Day 9）
+  // 示例数据模式下：除"取消"、以及只读的"查看课程"外，所有编辑类按钮一律禁用（Day 9）
   // 以前是"点了才提示不能改"，现在改成"直接变灰点不动"，更接近正常产品
-  if (mockMode && action !== "cancel") {
+  if (mockMode && action !== "cancel" && action !== "detail") {
     btn.disabled = true;
     btn.title = "示例数据模式下不能修改";
   }
@@ -1077,6 +1098,7 @@ function buildCategoryCard(category) {
 
   const actions = document.createElement("div");
   actions.className = "card-actions";
+  actions.appendChild(makeButton("查看课程", "detail", "btn-ghost"));
   actions.appendChild(makeButton("修改", "edit", "btn-ghost"));
   actions.appendChild(makeButton("删除", "delete", "btn-danger"));
   card.appendChild(actions);
@@ -1159,6 +1181,111 @@ function renderCategories() {
     } else {
       list.appendChild(buildCategoryCard(category));
     }
+  });
+}
+
+// ---- 板块详情页（Day 13）：#/category/<id> ----
+
+function makeDetailNumber(label, value) {
+  const box = document.createElement("div");
+  box.className = "number-item";
+  const dt = document.createElement("span");
+  dt.className = "detail-label";
+  dt.textContent = label;
+  const dd = document.createElement("strong");
+  dd.className = "detail-value";
+  dd.textContent = value;
+  box.appendChild(dt);
+  box.appendChild(dd);
+  return box;
+}
+
+// 详情页里的课程行是只读的：这里不放修改/删除按钮，避免出现"点了没反应"的死按钮
+function buildDetailCourseRow(course) {
+  const row = document.createElement("div");
+  row.className = "detail-course";
+
+  const name = document.createElement("span");
+  name.className = "detail-course-name";
+  name.textContent = course.name;
+
+  const meta = document.createElement("span");
+  meta.className = "detail-course-meta";
+  const statusText = course.status === "done" ? "已修" : "计划修";
+  const scoreText = (course.status === "done" && typeof course.score === "number")
+    ? " · " + course.score + " 分"
+    : "";
+  meta.textContent = course.credits + " 学分 · " + statusText + scoreText;
+
+  row.appendChild(name);
+  row.appendChild(meta);
+  return row;
+}
+
+function renderDetail() {
+  const titleEl = document.getElementById("detail-title");
+  const subEl = document.getElementById("detail-subtitle");
+  const summaryEl = document.getElementById("detail-summary");
+  const listEl = document.getElementById("detail-course-list");
+  if (!titleEl || !listEl) return;
+
+  const category = state.categories.filter(function (c) { return c.id === currentDetailId; })[0];
+
+  // 板块不存在（被删除 / 地址栏手输错）：给出可理解的提示与退路
+  if (!category) {
+    titleEl.textContent = "板块详情";
+    if (subEl) { subEl.textContent = ""; subEl.hidden = true; }
+    if (summaryEl) summaryEl.innerHTML = "";
+    listEl.innerHTML = "";
+    listEl.appendChild(makeEmpty("没找到这个板块。它可能已经被删除了——点上面的「返回板块列表」回去看看。"));
+    return;
+  }
+
+  titleEl.textContent = category.name + " · 课程明细";
+  if (subEl) {
+    subEl.textContent = requiredText(category.requiredCredits)
+      + (category.note ? "；" + category.note : "");
+    subEl.hidden = false;
+  }
+
+  const stat = gapStats.filter(function (s) { return s.categoryId === category.id; })[0];
+  const courses = state.courses.filter(function (c) { return c.categoryId === category.id; });
+  const doneCredits = stat ? stat.doneCredits : 0;
+
+  if (summaryEl) {
+    summaryEl.innerHTML = "";
+    summaryEl.appendChild(makeDetailNumber("已修学分", String(doneCredits)));
+    summaryEl.appendChild(makeDetailNumber(
+      "要求学分",
+      (category.requiredCredits === null || category.requiredCredits === undefined)
+        ? "未设置"
+        : String(category.requiredCredits)
+    ));
+    summaryEl.appendChild(makeDetailNumber(
+      "还差",
+      (stat && stat.gap !== null && stat.gap !== undefined) ? String(stat.gap) : "—"
+    ));
+  }
+
+  // 四种状态
+  const status = listStatusOf(courses.length);
+  listEl.innerHTML = "";
+
+  if (status === "loading") {
+    listEl.appendChild(makeListSkeleton(3));
+    return;
+  }
+  if (status === "error") {
+    listEl.appendChild(makeListError());
+    return;
+  }
+  if (status === "empty") {
+    listEl.appendChild(makeEmpty("这个板块下还没有课程。到「课程」页添加时，把所属板块选成它就行。"));
+    return;
+  }
+
+  courses.forEach(function (course) {
+    listEl.appendChild(buildDetailCourseRow(course));
   });
 }
 
@@ -1812,6 +1939,11 @@ function bindEvents() {
         return;
       }
 
+      if (action === "detail") {
+        window.location.hash = "#/category/" + id; // 进板块详情（Day 13）
+        return;
+      }
+
       if (action === "delete") {
         requestDelete("category", id, card);
       }
@@ -2047,6 +2179,14 @@ function bindEvents() {
   window.addEventListener("hashchange", function () {
     showView(parseHash(), { loading: true });
   });
+
+  // 详情页：返回板块列表（Day 13）
+  const detailBack = document.getElementById("detail-back");
+  if (detailBack) {
+    detailBack.addEventListener("click", function () {
+      window.location.hash = "#/categories";
+    });
+  }
 
   // dev：列表状态（加载中 / 空 / 错误 / 跟随真实数据）
   const listState = document.getElementById("list-state");

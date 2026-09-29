@@ -151,10 +151,19 @@ body {
 
 .layout {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  /* Day 13：外层改为单列，一次只装一个视图；两列的排布交给 .view-grid */
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   /* 同行两个板块等高（Day 9）：原来是 align-items: start，
      导致同一行的板块一长一短、底边对不齐，课程录多之后差距还会更大 */
+  align-items: stretch;
+}
+
+/* 视图内部的 2 列栅格（概览视图用） */
+.view-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
   align-items: stretch;
 }
 
@@ -406,6 +415,103 @@ select:disabled {
   background: var(--bg-soft);
   color: var(--text-soft);
   font-size: 13px;
+}
+
+/* ---------- 视图导航与列表四种状态（Day 13） ---------- */
+
+/* 拆成多视图后，"第几板块"的线性编号失去意义，隐藏数字徽标 */
+.panel-num {
+  display: none;
+}
+
+.site-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.nav-link {
+  padding: 8px 16px;
+  margin-bottom: -1px;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  color: var(--text-soft);
+  text-decoration: none;
+  font-size: 14px;
+}
+
+.nav-link:hover {
+  background: #f1efe8;
+  color: var(--text-main);
+}
+
+/* 当前视图：视觉上"凸出来"，同时给读屏软件标注当前页 */
+.nav-link.is-active {
+  background: var(--bg-panel);
+  border-color: var(--border);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.nav-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.breadcrumb {
+  margin: 0 0 12px;
+  color: var(--text-hint);
+  font-size: 13px;
+}
+
+.state-tip {
+  margin: 0;
+  color: var(--text-hint);
+  font-size: 13px;
+}
+
+.list-skeleton {
+  display: grid;
+  gap: 12px;
+}
+
+.list-skeleton-card {
+  height: 56px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #ececea;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+.list-error {
+  padding: 16px;
+  border: 1px solid var(--danger-border);
+  border-radius: 8px;
+  background: var(--danger-bg);
+}
+
+.list-error-text {
+  margin: 0 0 4px;
+  color: var(--danger-text);
+  font-size: 14px;
+}
+
+.list-error .btn-ghost {
+  margin-top: 12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .list-skeleton-card {
+    animation: none;
+  }
 }
 
 /* 复制结论那一行的排布与备用文本框（Day 11） */
@@ -746,6 +852,7 @@ select:disabled {
   }
 
   .layout,
+  .view-grid,
   .skeleton-grid {
     grid-template-columns: minmax(0, 1fr);
   }

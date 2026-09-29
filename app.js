@@ -863,6 +863,109 @@ function requestDelete(kind, id, cardEl) {
   }, 260);
 }
 
+// ---------------------------------------------------------------------------
+// 视图路由与列表四种状态（Day 13）
+// ---------------------------------------------------------------------------
+
+let currentView = "dashboard";   // 当前显示的视图
+let listStateOverride = "";      // 开发者开关：强制列表呈现某状态（"" = 跟随真实数据）
+
+const VIEW_MAP = {
+  dashboard: { el: "view-dashboard", title: "概览", crumb: "首页 › 概览" },
+  courses: { el: "view-courses", title: "课程管理", crumb: "首页 › 课程管理" },
+  categories: { el: "view-categories", title: "学分板块", crumb: "首页 › 学分板块" }
+};
+
+// 从 #/xxx 解析出视图名；地址栏没写或写错时，一律回概览
+function parseHash() {
+  const raw = (window.location.hash || "").replace(/^#\/?/, "").trim().toLowerCase();
+  return VIEW_MAP[raw] ? raw : "dashboard";
+}
+
+function showView(key, opts) {
+  const withLoading = !!(opts && opts.loading);
+  currentView = VIEW_MAP[key] ? key : "dashboard";
+
+  Object.keys(VIEW_MAP).forEach(function (k) {
+    const el = document.getElementById(VIEW_MAP[k].el);
+    if (el) el.hidden = (k !== currentView);
+  });
+
+  const links = document.querySelectorAll(".nav-link");
+  links.forEach(function (link) {
+    const active = link.dataset.view === currentView;
+    if (active) link.setAttribute("aria-current", "page");
+    else link.removeAttribute("aria-current");
+    link.classList.toggle("is-active", active);
+  });
+
+  const crumb = document.getElementById("breadcrumb");
+  if (crumb) crumb.textContent = VIEW_MAP[currentView].crumb;
+  document.title = VIEW_MAP[currentView].title + "｜学分规划助手";
+
+  if (withLoading) viewListLoading();
+  else renderAll();
+}
+
+// 切换视图 / 重新读取：先显示"加载中"，再回到真实状态
+function viewListLoading() {
+  const previous = listStateOverride;
+  listStateOverride = "loading";
+  renderAll();
+  window.setTimeout(function () {
+    listStateOverride = previous;
+    renderAll();
+  }, 250);
+}
+
+// 列表呈现哪种状态：开发者开关优先，其次看有没有数据
+function listStatusOf(count) {
+  if (listStateOverride) return listStateOverride;
+  return count === 0 ? "empty" : "success";
+}
+
+function makeListSkeleton(count) {
+  const box = document.createElement("div");
+  box.className = "list-skeleton";
+  box.setAttribute("aria-busy", "true");
+  const tip = document.createElement("p");
+  tip.className = "state-tip";
+  tip.textContent = "正在读取本机数据…";
+  box.appendChild(tip);
+  for (let i = 0; i < count; i++) {
+    const bar = document.createElement("div");
+    bar.className = "list-skeleton-card";
+    box.appendChild(bar);
+  }
+  return box;
+}
+
+function makeListError() {
+  const box = document.createElement("div");
+  box.className = "list-error";
+  box.setAttribute("role", "alert");
+  const text = document.createElement("p");
+  text.className = "list-error-text";
+  text.textContent = "数据读取失败，没能取到本机保存的内容。";
+  const hint = document.createElement("p");
+  hint.className = "state-tip";
+  hint.textContent = "常见原因是浏览器隐私模式或存储被清理。可以点「重试」再读一次。";
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "btn-ghost";
+  btn.textContent = "重试";
+  btn.addEventListener("click", function () {
+    listStateOverride = "";
+    const sel = document.getElementById("list-state");
+    if (sel) sel.value = "";
+    viewListLoading();
+  });
+  box.appendChild(text);
+  box.appendChild(hint);
+  box.appendChild(btn);
+  return box;
+}
+
 function renderAll() {
   gapStats = calcCategoryStats(state);
   renderCategoryOptions();
@@ -1032,7 +1135,18 @@ function renderCategories() {
 
   list.innerHTML = "";
 
-  if (state.categories.length === 0) {
+  // 四种状态（Day 13）：加载中 / 正常 / 空 / 错误
+  const status = listStatusOf(state.categories.length);
+
+  if (status === "loading") {
+    list.appendChild(makeListSkeleton(2));
+    return;
+  }
+  if (status === "error") {
+    list.appendChild(makeListError());
+    return;
+  }
+  if (status === "empty") {
     list.appendChild(makeEmpty(
       "还没有板块。先在上面添加第一个板块，例如“专业选修”，并填上它要求多少学分。"
     ));
@@ -1238,8 +1352,21 @@ function renderCourses() {
 
   list.innerHTML = "";
 
-  if (state.courses.length === 0) {
-    const emptyBox0 = document.getElementById("filter-empty");
+  // 四种状态（Day 13）：加载中 / 正常 / 空 / 错误
+  const emptyBox0 = document.getElementById("filter-empty");
+  const status = listStatusOf(state.courses.length);
+
+  if (status === "loading") {
+    if (emptyBox0) emptyBox0.hidden = true;
+    list.appendChild(makeListSkeleton(3));
+    return;
+  }
+  if (status === "error") {
+    if (emptyBox0) emptyBox0.hidden = true;
+    list.appendChild(makeListError());
+    return;
+  }
+  if (status === "empty") {
     if (emptyBox0) emptyBox0.hidden = true;
     list.appendChild(makeEmpty(
       state.categories.length === 0
@@ -1250,7 +1377,7 @@ function renderCourses() {
   }
 
   const visible = filterCourses(state.courses, courseFilter);
-  const emptyBox = document.getElementById("filter-empty");
+  const emptyBox = emptyBox0;
 
   if (visible.length === 0) {
     // 有数据但被筛没了：行内空态，说清被隐藏了多少、怎么恢复（Day 12）
@@ -1534,7 +1661,7 @@ function showRealData() {
     hideGlobalError();
   }
   setSkeleton(false);
-  renderAll();
+  showView(parseHash()); // 按地址栏 hash 落到对应视图，内部会 renderAll（Day 13）
 }
 
 function enterLoading() {
@@ -1913,6 +2040,20 @@ function bindEvents() {
       const preview = document.getElementById("state-preview");
       if (preview) preview.value = "";
       showRealData();
+    });
+  }
+
+  // 视图切换：hash 路由（Day 13）——点导航改地址栏 hash，浏览器前进/后退也能用
+  window.addEventListener("hashchange", function () {
+    showView(parseHash(), { loading: true });
+  });
+
+  // dev：列表状态（加载中 / 空 / 错误 / 跟随真实数据）
+  const listState = document.getElementById("list-state");
+  if (listState) {
+    listState.addEventListener("change", function () {
+      listStateOverride = listState.value;
+      renderAll();
     });
   }
 

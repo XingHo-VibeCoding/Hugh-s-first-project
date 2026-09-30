@@ -602,6 +602,34 @@ select:disabled {
   padding: 8px;
 }
 
+/* 决策板块：说明文字默认收起，点开再看（Day 14·同伴反馈） */
+.overview-toggle {
+  align-self: flex-start;
+  margin-top: 4px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #ffffff;
+  color: var(--text-soft);
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.overview-toggle:hover {
+  background: #f1efe8;
+  color: var(--text-main);
+}
+
+.overview-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.overview-detail {
+  margin-top: 8px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .list-skeleton-card {
     animation: none;

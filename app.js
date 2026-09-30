@@ -666,6 +666,7 @@ let pendingDelete = null;       // 软删除待撤销：{ kind, id, item, index,
 let simulateDeleteFail = false; // 开发者开关：模拟删除提交失败，用于测试错误提示
 let courseFilter = { keyword: "", categoryId: "", status: "" }; // 课程列表筛选（Day 12，只影响显示不改数据）
 let expandedCourseGroups = {};  // 课程列表按板块分组的展开状态（Day 14·同伴反馈：长列表要折叠）
+let expandedOverviewRows = {};  // 决策板块每行的说明展开状态（Day 14·同伴反馈：说明文字可折叠）
 
 function showError(boxId, message) {
   const box = document.getElementById(boxId);
@@ -1791,16 +1792,34 @@ function renderDecision() {
 
     row.appendChild(head);
 
+    // 说明 / 特殊条件 / 建议 这三段正是"一滑老长"的元凶：默认收起，只保留上面那行结论（Day 14·同伴反馈）
+    const isOpen = !!expandedOverviewRows[stat.categoryId];
+
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "overview-toggle";
+    toggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
+    toggle.textContent = isOpen ? "收起说明" : "展开说明";
+    toggle.addEventListener("click", function () {
+      expandedOverviewRows[stat.categoryId] = !expandedOverviewRows[stat.categoryId];
+      renderDecision();
+    });
+    row.appendChild(toggle);
+
+    const detail = document.createElement("div");
+    detail.className = "overview-detail";
+    detail.hidden = !isOpen;
+
     const text = document.createElement("p");
     text.className = "overview-message";
     text.textContent = message;
-    row.appendChild(text);
+    detail.appendChild(text);
 
     if (stat.note) {
       const note = document.createElement("p");
       note.className = "card-note";
       note.textContent = "特殊条件：" + stat.note;
-      row.appendChild(note);
+      detail.appendChild(note);
     }
 
     const rec = buildRecommendation(stat);
@@ -1810,7 +1829,7 @@ function renderDecision() {
       planned.className = "overview-planned";
 
       if (rec.level === "none") {
-        planned.textContent = "计划修课程：还没有登记 —— 先把打算修的课加到「② 课程板块」，这里就会给出建议。";
+        planned.textContent = "计划修课程：还没有登记 —— 先把打算修的课加到「课程」页，这里就会给出建议。";
       } else if (rec.enough) {
         planned.classList.add("is-enough");
         planned.textContent = "建议优先选：" + rec.picked.map(function (c) {
@@ -1822,16 +1841,17 @@ function renderDecision() {
         }).join("、") + " —— 合计只有 " + formatNumber(rec.sum) + " 学分，仍差 "
           + formatNumber(rec.remaining) + " 学分，需要再补其它课程。";
       }
-      row.appendChild(planned);
+      detail.appendChild(planned);
     } else if (stat.plannedCourses.length > 0) {
       const planned = document.createElement("p");
       planned.className = "overview-planned";
       planned.textContent = "计划修课程：" + stat.plannedCourses.map(function (c) {
         return c.name + "（" + c.credits + " 学分）";
       }).join("、") + " —— 这个板块已修够，可以不用选。";
-      row.appendChild(planned);
+      detail.appendChild(planned);
     }
 
+    row.appendChild(detail);
     box.appendChild(row);
   });
 }

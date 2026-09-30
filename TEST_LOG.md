@@ -7,12 +7,28 @@
 
 ## 项目怎么跑起来（给同伴照抄）
 
+### 方式 A：能敲几行命令（推荐，最稳）
+
+前 **3 步都在命令行里敲**，第 4 步才轮到浏览器。
+Windows 上用「命令提示符（CMD）」或「PowerShell」都行；Mac 用「终端 Terminal」。
+
 1. 拿到代码：`git clone https://github.com/XingHo-VibeCoding/Hugh-s-first-project.git`
 2. 进入文件夹：`cd Hugh-s-first-project`
 3. 起本地服务：`python -m http.server 8000`
-4. 浏览器打开：`http://localhost:8000`
+   - 提示找不到 `python` 时，把 `python` 换成 `py` 或 `python3` 再试
+4. **这一步不在命令行**：打开浏览器，地址栏输入 `http://localhost:8000`
 
-> 如果同伴不方便装环境，可以把项目发布成在线链接后直接发给他（GitHub Pages / 静态托管都行）。
+> 小技巧：在文件夹顶部的地址栏里直接输入 `cmd` 回车，命令行会正好停在这个文件夹里，第 2 步都省了。
+
+### 方式 B：完全不想碰命令行
+
+1. 打开仓库网页 → 点绿色「Code」→「Download ZIP」→ 下载后解压
+2. 双击里面的 `index.html`，浏览器就会打开，直接能用
+3. 注意：这样打开时，**个别浏览器会限制本地存储**（录的数据可能存不住）。做 5 分钟试用完全够；要反复录数据请用方式 A。
+
+### 方式 C：给同伴一个在线链接（最省事）
+
+把项目发布成静态网址（GitHub Pages 之类）后把链接发过去，同伴什么都不用装、点开即用。
 
 ---
 

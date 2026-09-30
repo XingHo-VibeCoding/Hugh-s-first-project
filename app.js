@@ -665,6 +665,7 @@ let lastAddedId = null;   // 刚刚新增的那一条，用来在列表里高亮
 let pendingDelete = null;       // 软删除待撤销：{ kind, id, item, index, name, timer, removed }
 let simulateDeleteFail = false; // 开发者开关：模拟删除提交失败，用于测试错误提示
 let courseFilter = { keyword: "", categoryId: "", status: "" }; // 课程列表筛选（Day 12，只影响显示不改数据）
+let expandedCourseGroups = {};  // 课程列表按板块分组的展开状态（Day 14·同伴反馈：长列表要折叠）
 
 function showError(boxId, message) {
   const box = document.getElementById(boxId);
@@ -835,6 +836,7 @@ function undoDelete() {
   const pd = pendingDelete;
   if (!pd) return;
   if (pd.timer) { window.clearTimeout(pd.timer); pd.timer = null; }
+  if (pd.kind === "course") expandedCourseGroups[pd.item.categoryId || ""] = true; // 恢复后要能看见
   insertItem(pd.kind, pd.item, pd.index);
   pendingDelete = null;
   hideUndoToast();
@@ -1463,6 +1465,28 @@ function filterCourses(courses, filter) {
   });
 }
 
+// 按所属板块分组：组顺序跟随板块列表顺序，"未归类"永远排最后（Day 14）
+function groupCoursesByCategory(visible, categories) {
+  const known = {};
+  categories.forEach(function (c) { known[c.id] = true; });
+
+  const byCategory = {};
+  visible.forEach(function (course) {
+    // 板块已不存在的"孤儿课程"归入未归类，保证任何课程都不会在列表里消失
+    const key = (course.categoryId && known[course.categoryId]) ? course.categoryId : "";
+    if (!byCategory[key]) byCategory[key] = [];
+    byCategory[key].push(course);
+  });
+
+  const groupKeys = [];
+  categories.forEach(function (c) {
+    if (byCategory[c.id]) groupKeys.push(c.id);
+  });
+  if (byCategory[""]) groupKeys.push("");
+
+  return { groupKeys: groupKeys, byCategory: byCategory };
+}
+
 function resetCourseFilter() {
   courseFilter = { keyword: "", categoryId: "", status: "" };
   const keywordEl = document.getElementById("filter-keyword");
@@ -1516,12 +1540,66 @@ function renderCourses() {
   }
   if (emptyBox) emptyBox.hidden = true;
 
-  visible.forEach(function (course) {
-    if (course.id === editingCourseId) {
-      list.appendChild(buildCourseEditCard(course));
-    } else {
-      list.appendChild(buildCourseCard(course));
+  // 按所属板块分组、默认折叠（Day 14·同伴反馈：课程一多要滑很久）
+  const grouped = groupCoursesByCategory(visible, state.categories);
+
+  grouped.groupKeys.forEach(function (catId) {
+    const courses = grouped.byCategory[catId];
+    const cat = state.categories.filter(function (c) { return c.id === catId; })[0];
+    const groupName = cat ? cat.name : "未归类";
+
+    // 正在编辑 / 刚添加的课程所在组自动展开，避免"点了修改卡片却不见了"
+    const hasSpecial = courses.some(function (c) {
+      return c.id === editingCourseId || c.id === lastAddedId;
+    });
+    if (hasSpecial) expandedCourseGroups[catId] = true;
+
+    const isOpen = !!expandedCourseGroups[catId];
+
+    const group = document.createElement("div");
+    group.className = "course-group" + (isOpen ? " is-open" : "");
+
+    const head = document.createElement("button");
+    head.type = "button";
+    head.className = "course-group-head";
+    head.setAttribute("aria-expanded", isOpen ? "true" : "false");
+
+    const title = document.createElement("span");
+    title.className = "course-group-title";
+    title.textContent = groupName;
+
+    const count = document.createElement("span");
+    count.className = "course-group-count";
+    count.textContent = courses.length + " 门";
+
+    const arrow = document.createElement("span");
+    arrow.className = "course-group-arrow";
+    arrow.setAttribute("aria-hidden", "true");
+    arrow.textContent = isOpen ? "▾" : "▸";
+
+    head.appendChild(title);
+    head.appendChild(count);
+    head.appendChild(arrow);
+    head.addEventListener("click", function () {
+      expandedCourseGroups[catId] = !expandedCourseGroups[catId];
+      renderCourses();
+    });
+    group.appendChild(head);
+
+    if (isOpen) {
+      const body = document.createElement("div");
+      body.className = "course-group-body";
+      courses.forEach(function (course) {
+        if (course.id === editingCourseId) {
+          body.appendChild(buildCourseEditCard(course));
+        } else {
+          body.appendChild(buildCourseCard(course));
+        }
+      });
+      group.appendChild(body);
     }
+
+    list.appendChild(group);
   });
 }
 
@@ -2052,6 +2130,8 @@ function bindEvents() {
       const action = btn.dataset.action;
 
       if (action === "edit") {
+        const editingCourse = state.courses.filter(function (c) { return c.id === id; })[0];
+        if (editingCourse) expandedCourseGroups[editingCourse.categoryId || ""] = true;
         editingCourseId = id;
         showError("course-error", "");
         renderCourses();

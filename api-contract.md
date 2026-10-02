@@ -19,34 +19,44 @@
 | 云函数公网域名 | `https://my-first-project-d2epfvu0373796b-1489184401.ap-shanghai.app.tcloudbase.com` | HTTP 网关默认域名，另有独立有效期，到期在「HTTP 访问服务」点续期 |
 | 已实现接口 | `/api/health` | ✅ 2026-10-01 验证通过 |
 | 静态托管公网地址 | `https://my-first-project-d2epfvu0373796b-1489184401.tcloudbaseapp.com` | 第 2 周页面（本机存储数据）已上线 |
+| 云数据库 | CloudBase **PostgreSQL**（Day 16 开通） | 表 `categories` / `courses` 已建；脚本 `db/schema.sql`、`db/seed.sql` 已入库 |
 | 云函数类型 | **普通云函数（事件函数）** | ⚠️ 选「HTTP 云函数」会导致网关 403，勿选 |
 | CORS 跨域 | **未配置** | 今日不做，Day 16–20 处理 |
 
 ---
 
-## 二、本项目用哪两张表
+## 二、本项目用哪两张表（Day 16 已落库 ✅）
 
-本项目全部数据只有两组，上云后对应 CloudBase 数据库的两张表（字段与 `TECH_DESIGN.md` 第四节一一对应）：
+> 本节在 Day 16 落库后回写。**数据库列名用 snake_case，接口 JSON 字段保持 camelCase**——两套名字是刻意的，映射见「落库列名」列，写接口时照它转。
+> 建表脚本：`db/schema.sql`；种子脚本：`db/seed.sql`（可重复执行；**仅开发阶段使用，第 20 天上线后禁止再执行**，否则会清空真实数据）。
+> 本课程不登录、不建用户表：两表均无「身份 / 用户」字段，唯一约束只加在业务字段上。
 
 **表 1：`categories`（学分板块）**
 
-| 字段 | 类型 | 说明 | 校验 |
-|---|---|---|---|
-| id | 字符串 | 唯一标识 | 不可重复 |
-| name | 字符串 | 板块名（如"专业选修"） | 非空、去空格、≤20 字 |
-| requiredCredits | 数字或 null | 要求学分 | 0.5 的整数倍；**允许为空** |
-| note | 字符串 | 特殊条件备注（如"须含 2 学分艺术类"） | 可空、≤100 字 |
+| JSON 字段（camelCase） | 落库列名（snake_case） | 数据库类型 | 约束 | 校验 |
+|---|---|---|---|---|
+| id | id | varchar(32) | PRIMARY KEY | 不可重复 |
+| name | name | varchar(20) | NOT NULL UNIQUE；去空格后非空 | 非空、≤20 字、**板块名全局唯一** |
+| requiredCredits | required_credits | numeric(3,1) | 可空；填了须 >0 且为 0.5 倍数 | 0.5 的整数倍；**允许为空** |
+| note | note | varchar(100) | 可空 | ≤100 字 |
+| —（不对外暴露） | created_at / updated_at | timestamptz | NOT NULL DEFAULT now() | 仅排序与排错用，接口不返回 |
 
 **表 2：`courses`（课程）**
 
-| 字段 | 类型 | 说明 | 校验 |
-|---|---|---|---|
-| id | 字符串 | 唯一标识 | 不可重复 |
-| name | 字符串 | 课程名 | 非空、去空格、≤30 字 |
-| credits | 数字 | 学分 | 0.5 的整数倍 |
-| categoryId | 字符串 | 所属板块 | 必须指向已存在的板块 |
-| status | 字符串 | `done`（已修）/ `planned`（计划修） | 二选一 |
-| score | 数字或 null | 成绩 0–100 整数 | 可选填；**<60 视为不及格、不计入已修学分**；为空不计入 GPA |
+| JSON 字段（camelCase） | 落库列名（snake_case） | 数据库类型 | 约束 | 校验 |
+|---|---|---|---|---|
+| id | id | varchar(32) | PRIMARY KEY | 不可重复 |
+| name | name | varchar(30) | NOT NULL；去空格后非空 | 非空、≤30 字 |
+| credits | credits | numeric(3,1) | NOT NULL；>0 且为 0.5 倍数 | 0.5 的整数倍 |
+| categoryId | category_id | varchar(32) | 可空；外键 → `categories(id)` **ON DELETE SET NULL**；**UNIQUE(category_id, name)** | 指向已存在板块；NULL = 未归类；**同板块内课程名不重复，跨板块允许同名** |
+| status | status | varchar(10) | NOT NULL，CHECK `('done','planned')`，默认 `'planned'` | 二选一 |
+| score | score | smallint | 可空；CHECK 0–100 | **<60 视为不及格、不计入已修学分**；为空不计入 GPA |
+| —（不对外暴露） | deleted_at / delete_expires_at | timestamptz | 可空 | 软删除（契约第 9、10 条）：`deleted_at` 非 NULL 即已删除，列表接口不返回；`delete_expires_at` 即响应中的 `restoreBefore`（5 秒撤销窗口） |
+| —（不对外暴露） | created_at / updated_at | timestamptz | NOT NULL DEFAULT now() | 仅排序与排错用，接口不返回 |
+
+**两表关联**：`courses.category_id` → `categories.id`。删板块 `mode=move` 时，外键 `ON DELETE SET NULL` 自动把课置为"未归类"——数据库层面兜底，不依赖接口代码写对。
+
+**索引**（Day 16 建表时一并创建）：`idx_courses_category_id`（按板块筛）、`idx_courses_status`（按状态筛）、`idx_courses_active`（部分索引，只覆盖未删除行——列表接口最常用的查询路径）。
 
 ---
 

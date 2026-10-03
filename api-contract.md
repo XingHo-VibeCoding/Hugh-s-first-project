@@ -17,10 +17,11 @@
 | **剩余额度** | 功能用量概览：消耗 0 点（额度基本未动） | 控制台「环境 → 用量概览」 |
 | **套餐到期日期** | **2026-11-01 23:59:59** | 到期后公网不可用；**须在到期前手动续订（0 元）**，腾讯不会提前很久提醒 |
 | 云函数公网域名 | `https://my-first-project-d2epfvu0373796b-1489184401.ap-shanghai.app.tcloudbase.com` | HTTP 网关默认域名，另有独立有效期，到期在「HTTP 访问服务」点续期 |
-| 已实现接口 | `/api/health` | ✅ 2026-10-01 验证通过 |
+| 已实现接口 | `/api/health`、`GET /api/categories`、`GET /api/courses` | ✅ health 2026-10-01、两个读接口 2026-10-03 验证通过 |
 | 静态托管公网地址 | `https://my-first-project-d2epfvu0373796b-1489184401.tcloudbaseapp.com` | 第 2 周页面（本机存储数据）已上线 |
 | 云数据库 | CloudBase **PostgreSQL**（Day 16 开通） | 表 `categories` / `courses` 已建；脚本 `db/schema.sql`、`db/seed.sql` 已入库 |
 | 云函数类型 | **普通云函数（事件函数）** | ⚠️ 选「HTTP 云函数」会导致网关 403，勿选 |
+| 后端接口部署形态 | **一路由一函数 + `API_ROUTE` 环境变量自报身份** | 本环境 HTTP 网关不向事件函数转发请求路径（event.path 恒为 `/`），单函数靠路径分发不可行；函数名 = 路由名：`api`(health) / `categories` / `courses`；API Key 走函数配置「API Key 设置」开关注入 `CLOUDBASE_APIKEY`（后端专用） |
 | CORS 跨域 | **未配置** | 今日不做，Day 16–20 处理 |
 
 ---
@@ -64,31 +65,38 @@
 
 - **Base URL**：`https://my-first-project-d2epfvu0373796b-1489184401.ap-shanghai.app.tcloudbase.com`
 - **请求与响应一律 JSON**；请求头 `Content-Type: application/json`。
-- **成功响应统一信封**：`{ "data": <数据>, "error": null }`
-- **错误响应统一信封**：`{ "data": null, "error": { "code": "<错误码>", "message": "<可直接展示给用户的话>" } }`
-- 例外：`GET /api/health` 保留 Day 15 已上线的原始返回体，不套信封。
+- **成功响应统一信封**：`{ "ok": true, "data": <数据> }`
+- **错误响应统一信封**：`{ "ok": false, "error": "<可直接展示给用户的中文说明>" }`
+- 例外：`GET /api/health` 保留 Day 15 已上线的原始返回体，不套信封（它本来就是 `{"ok":true,...}` 形状，天然一致）。
 
-**错误码表（全部接口通用）**
+> **Day 17 改版记录（原为 `{data,error}` 信封）**
+> 原因：Day 17 起前端要按 `ok` 判断成败，`{"data":…,"error":null}` 这种"两个字段互相打架"的形状，前端每处都得写 `if (res.error)`，容易漏。
+> 取舍：`error` 由 `{code,message}` 简化为**纯中文字符串**，错误码暂时不对外返回（服务端日志仍按下面四类归类，便于排查）。
+> 若 Day 18 写入接口出现"前端必须按错误类型分支"的场景，**先改本节再改代码**，可恢复为携带 code 的形式。
 
-| code | 含义 | 前端该怎么说 |
+**错误归类（服务端内部使用；对外只给中文 `error` 文本）**
+
+| 归类 | 何时触发 | 对外 error 文案（示例） |
 |---|---|---|
-| `VALIDATION_ERROR` | 参数不合规则（空名、学分非 0.5 倍数、成绩越界等） | 直接显示 `error.message` |
+| `VALIDATION_ERROR` | 参数不合规则（空名、学分非 0.5 倍数、成绩越界等） | "课程名不能为空" |
 | `NOT_FOUND` | 该 id 不存在（常见的：改/删了一门已被删掉的课） | "这条数据已经不存在了，刷新看看" |
-| `REFERENCED_BY_COURSES` | 删板块时该板块下还有课程，且调用方没指定处理方式 | 弹问："该板块下还有 N 门课，要一起删还是移到未归类？" |
-| `INTERNAL` | 服务器自身出错 | "服务出了点问题，稍后再试" |
+| `REFERENCED_BY_COURSES` | 删板块时该板块下还有课程，且调用方没指定处理方式 | "该板块下还有 N 门课，请先选择处理方式" |
+| `INTERNAL` | 服务器自身出错（含数据库连不上、SQL 失败） | "服务出了点问题，稍后再试" |
+
+> 前端需要知道"该板块下有几门课"时，**不要靠解析 error 文本**——先调 `GET /api/courses?categoryId=xx` 自己算，再弹问。这样前后端都不会因为改一句文案而崩。
 
 ---
 
-## 四、接口清单（9 个，8 个占位）
+## 四、接口清单（12 个，9 个占位）
 
 | # | 方法 | 路径 | 状态 |
 |---|---|---|---|
 | 1 | GET | `/api/health` | ✅ 已实现 |
-| 2 | GET | `/api/categories` | ⬜ 占位 |
+| 2 | GET | `/api/categories` | ✅ 已实现（Day 17） |
 | 3 | POST | `/api/categories` | ⬜ 占位 |
 | 4 | PATCH | `/api/categories/:id` | ⬜ 占位 |
 | 5 | DELETE | `/api/categories/:id` | ⬜ 占位 |
-| 6 | GET | `/api/courses` | ⬜ 占位 |
+| 6 | GET | `/api/courses` | ✅ 已实现（Day 17） |
 | 7 | POST | `/api/courses` | ⬜ 占位 |
 | 8 | PATCH | `/api/courses/:id` | ⬜ 占位 |
 | 9 | DELETE | `/api/courses/:id` | ⬜ 占位（软删除） |
@@ -119,7 +127,7 @@
 
 ---
 
-### 2. GET /api/categories —— 读板块列表
+### 2. GET /api/categories —— 读板块列表 ✅ 已实现
 
 对应页面动作：打开「① 学分板块」看到全部板块。
 
@@ -127,11 +135,13 @@
 - **成功 200**：
 
 ```json
-{ "data": [ { "id": "c1", "name": "专业选修", "requiredCredits": 12, "note": "须含 2 学分艺术类" } ], "error": null }
+{ "ok": true, "data": [ { "id": "c1", "name": "专业选修", "requiredCredits": 12, "note": "须含 2 学分艺术类" } ] }
 ```
 
 - **错误**：`INTERNAL`
-- 无数据时返回 `"data": []`（不是 null）
+- 无数据时返回 `"data": []`（不是 null），`ok` 仍是 `true`
+- **代码实现**：仓库 `cloudfunctions/api/`（部署形态：独立函数 `categories`，环境变量 `API_ROUTE=categories` 自报身份——本环境 HTTP 网关不向事件函数转发路径，故一路由一函数）
+- **验证记录**：2026-10-03 公网实测返回 6 个板块；字段 camelCase、requiredCredits 为数字、空值正确为 `null`；改库后返回随之变化（真库验证）
 
 ---
 
@@ -151,8 +161,14 @@
 | requiredCredits | ❌ | 0.5 倍数或 null；不传按 null 处理 |
 | note | ❌ | ≤100 字 |
 
-- **成功 201**：`"data"` 为新建后带 id 的完整板块对象
+- **成功 201**：
+
+```json
+{ "ok": true, "data": { "id": "c7", "name": "创新创业", "requiredCredits": 2, "note": "" } }
+```
+
 - **错误**：`VALIDATION_ERROR`（名称为空/超长、学分非 0.5 倍数）、`INTERNAL`
+- 响应中的 id 由服务端生成（`c` + 随机串），不是前端传的
 
 ---
 
@@ -165,7 +181,7 @@
 - **成功 200**：`"data"` 为修改后的完整对象
 
 ```json
-{ "data": { "id": "c1", "name": "专业选修", "requiredCredits": 14, "note": "须含 2 学分艺术类" }, "error": null }
+{ "ok": true, "data": { "id": "c1", "name": "专业选修", "requiredCredits": 14, "note": "须含 2 学分艺术类" } }
 ```
 
 - **错误**：`NOT_FOUND`、`VALIDATION_ERROR`、`INTERNAL`
@@ -183,13 +199,13 @@
 - **成功 200**：`affectedCourses` 为被一并删除或移走的课程数
 
 ```json
-{ "data": { "id": "c1", "affectedCourses": 3 }, "error": null }
+{ "ok": true, "data": { "id": "c1", "affectedCourses": 3 } }
 ```
 - **错误**：`NOT_FOUND`、`REFERENCED_BY_COURSES`、`INTERNAL`
 
 ---
 
-### 6. GET /api/courses —— 读课程列表（含三种筛选）
+### 6. GET /api/courses —— 读课程列表（含三种筛选）✅ 已实现
 
 对应页面动作：课程列表，以及**关键词搜索 / 按板块筛 / 按状态筛**——三个动作共用这一个接口，只是多带参数。
 
@@ -200,15 +216,19 @@
 | keyword | 按课程名模糊搜索 | 字符串 |
 | categoryId | 只看某个板块 | 板块 id；传 `none` 表示"未归类" |
 | status | 只看某种状态 | `done` / `planned` |
+| limit | 最多返回多少条（**Day 17 余力加练**） | 正整数，默认不限制；非法值按未传处理 |
 
 - **成功 200**：
 
 ```json
-{ "data": [ { "id": "k1", "name": "高等数学", "credits": 4, "categoryId": "c1", "status": "done", "score": 87 } ], "error": null }
+{ "ok": true, "data": [ { "id": "k1", "name": "高等数学", "credits": 4, "categoryId": "c1", "status": "done", "score": 87 } ] }
 ```
 
 - **错误**：`VALIDATION_ERROR`（status 取值非法）、`INTERNAL`
-- 无匹配返回 `"data": []`（前端自行显示"都被筛掉了"空态）
+- 无匹配返回 `"data": []`（前端自行显示"都被筛掉了"空态），`ok` 仍是 `true`
+- **排序**：`created_at` 升序（先录入的在前），与第 2 周前端列表顺序一致
+- **代码实现**：仓库 `cloudfunctions/api/`（部署形态：独立函数 `courses`，环境变量 `API_ROUTE=courses`，同上）
+- **验证记录**：2026-10-03 公网实测返回 9 门课（credits 为数字、score 空值正确）；控制台改一行 score 72→95 后刷新接口随之变化（真库验证）；`?status=abc` 返回 400 中文错误（错误形状实测）；`limit` 参数已实现（余力加练）
 
 ---
 
@@ -230,8 +250,14 @@
 | status | ✅ | `done` / `planned` |
 | score | ❌ | 0–100 整数；`planned` 时不填 |
 
-- **成功 201**：`"data"` 为新建后带 id 的完整课程
+- **成功 201**：
+
+```json
+{ "ok": true, "data": { "id": "k10", "name": "天文学导论", "credits": 3, "categoryId": "c1", "status": "planned", "score": null } }
+```
+
 - **错误**：`VALIDATION_ERROR`、`NOT_FOUND`（板块不存在）、`INTERNAL`
+- 响应中的 id 由服务端生成（`k` + 随机串）
 
 ---
 
@@ -244,7 +270,7 @@
 - **成功 200**：`"data"` 为修改后的完整课程
 
 ```json
-{ "data": { "id": "k1", "name": "高等数学", "credits": 4, "categoryId": "c1", "status": "done", "score": 92 }, "error": null }
+{ "ok": true, "data": { "id": "k1", "name": "高等数学", "credits": 4, "categoryId": "c1", "status": "done", "score": 92 } }
 ```
 - **错误**：`NOT_FOUND`、`VALIDATION_ERROR`、`INTERNAL`
 
@@ -258,7 +284,7 @@
 - **成功 200**：
 
 ```json
-{ "data": { "id": "k1", "deleted": true, "restoreBefore": "2026-10-01T07:30:00.000Z" }, "error": null }
+{ "ok": true, "data": { "id": "k1", "deleted": true, "restoreBefore": "2026-10-01T07:30:00.000Z" } }
 ```
 
   - `restoreBefore` = 可撤销的截止时间（本项目定 5 秒）
@@ -275,7 +301,7 @@
 - **成功 200**：
 
 ```json
-{ "data": { "id": "k1", "deleted": false }, "error": null }
+{ "ok": true, "data": { "id": "k1", "deleted": false } }
 ```
 - **错误**：`NOT_FOUND`（超过时限或本来就没删）、`INTERNAL`
 
@@ -290,6 +316,7 @@
 
 ```json
 {
+  "ok": true,
   "data": {
     "categories": [
       {
@@ -311,8 +338,7 @@
       }
     ],
     "total": { "totalCredits": 148, "avgScore": 84.2, "gpa": 3.34 }
-  },
-  "error": null
+  }
 }
 ```
 
@@ -345,7 +371,7 @@
 - **成功 200**：返回实际写入的板块数与课程数
 
 ```json
-{ "data": { "categories": 6, "courses": 92 }, "error": null }
+{ "ok": true, "data": { "categories": 6, "courses": 92 } }
 ```
 - **错误**：`VALIDATION_ERROR`、`INTERNAL`
 - **状态**：候选占位。**本周是否实现待定**；若不实现则前端继续用本机数据演示。

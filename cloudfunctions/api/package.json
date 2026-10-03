@@ -1,0 +1,7 @@
+{
+  "name": "credit-planner-api",
+  "version": "1.1.0",
+  "description": "学分规划助手后端接口（CloudBase 普通云函数，HTTP 网关统一入口，PG 模式走 REST 网关）",
+  "main": "index.js",
+  "dependencies": {}
+}

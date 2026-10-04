@@ -17,7 +17,7 @@
 | **剩余额度** | 功能用量概览：消耗 0 点（额度基本未动） | 控制台「环境 → 用量概览」 |
 | **套餐到期日期** | **2026-11-01 23:59:59** | 到期后公网不可用；**须在到期前手动续订（0 元）**，腾讯不会提前很久提醒 |
 | 云函数公网域名 | `https://my-first-project-d2epfvu0373796b-1489184401.ap-shanghai.app.tcloudbase.com` | HTTP 网关默认域名，另有独立有效期，到期在「HTTP 访问服务」点续期 |
-| 已实现接口 | `/api/health`、`GET /api/categories`、`GET /api/courses` | ✅ health 2026-10-01、两个读接口 2026-10-03 验证通过 |
+| 已实现接口 | `/api/health`、`GET /api/categories`、`GET /api/courses`、`POST /api/courses` | ✅ health 2026-10-01、两个读接口 2026-10-03、写入接口 2026-10-04 验证通过 |
 | 静态托管公网地址 | `https://my-first-project-d2epfvu0373796b-1489184401.tcloudbaseapp.com` | 第 2 周页面（本机存储数据）已上线 |
 | 云数据库 | CloudBase **PostgreSQL**（Day 16 开通） | 表 `categories` / `courses` 已建；脚本 `db/schema.sql`、`db/seed.sql` 已入库 |
 | 云函数类型 | **普通云函数（事件函数）** | ⚠️ 选「HTTP 云函数」会导致网关 403，勿选 |
@@ -101,7 +101,7 @@
 | 4 | PATCH | `/api/categories/:id` | ⬜ 占位 |
 | 5 | DELETE | `/api/categories/:id` | ⬜ 占位 |
 | 6 | GET | `/api/courses` | ✅ 已实现（Day 17） |
-| 7 | POST | `/api/courses` | ⬜ 占位 |
+| 7 | POST | `/api/courses` | ✅ 已实现（Day 18） |
 | 8 | PATCH | `/api/courses/:id` | ⬜ 占位 |
 | 9 | DELETE | `/api/courses/:id` | ⬜ 占位（软删除） |
 | 10 | POST | `/api/courses/:id/restore` | ⬜ 占位（撤销删除） |
@@ -252,9 +252,9 @@
 |---|---|---|
 | name | ✅ | 非空、≤30 字 |
 | credits | ✅ | 0.5 倍数、>0 |
-| categoryId | ✅ | 必须指向已存在的板块（id 不存在 → NOT_FOUND） |
+| categoryId | ✅ | 必须指向已存在的板块（id 不存在 → NOT_FOUND）；**显式传 `null` 表示「未归类」**（与 GET 的 `categoryId=none` 对应，库里也确实存在这样的行） |
 | status | ✅ | `done` / `planned` |
-| score | ❌ | 0–100 整数；`planned` 时不填 |
+| score | ❌ | 0–100 整数；`planned` 时不填，**`planned` 却带了成绩 → 400**（不然调用方永远不知道自己传错了） |
 
 - **成功 201**：
 
@@ -262,8 +262,17 @@
 { "ok": true, "data": { "id": "k10", "name": "天文学导论", "credits": 3, "categoryId": "c1", "status": "planned", "score": null } }
 ```
 
-- **错误**：`VALIDATION_ERROR`、`NOT_FOUND`（板块不存在）、`INTERNAL`
+- **错误**：`VALIDATION_ERROR`（名称为空/超长、学分非 0.5 倍数、`planned` 却带了成绩、同板块下已存在同名课程）、`NOT_FOUND`（板块不存在）、`INTERNAL`
 - 响应中的 id 由服务端生成（`k` + 随机串）
+- **防重复**：同一板块下课程名不能重复（Day 16 建表时的 `UNIQUE(category_id, name)` 已落库）。再提交一次相同数据 → **HTTP 409**、`ok:false`，中文说明里点出是哪门课重名，**数据库不新增行**。
+  - ⚠️ 实现注意：Postgres 的唯一约束**不把 NULL 算作重复**，所以「未归类」（`categoryId` 为 `null`）的同名课程不受这条约束保护——代码里要单独查一次，按同样规则拒绝。
+- **代码实现**：仓库 `cloudfunctions/api/`（**与 GET 共用 `courses` 函数**，网关按路径转发、函数内部按 method 分支，不需要为写入再建一个函数）
+- **验证记录**（2026-10-04 公网实测）：
+  - 正常写入 → `201`，`data` 六个 camelCase 字段齐备，`credits` 是数字、`score` 为 `null`
+  - 同一条原样重发 → `409`「板块 c2 下已经有同名的课程了：线性代数」
+  - 缺 `name` → `400`「课程名不能为空」；学分 2.3 → `400` 点出「2.3」；`planned` 带成绩 → `400`
+  - 行数核对：写入前 9 → 写入后 10 → 重复提交仍是 10（校验与防重复都真的在工作）
+  - 读回闭环：新行出现在 `GET /api/courses` 末尾，`?keyword=线性代数` 能搜到
 
 ---
 

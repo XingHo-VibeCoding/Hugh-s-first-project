@@ -17,8 +17,12 @@ const http = require("http");
 const ENV_ID = process.env.CLOUDBASE_ENV || "my-first-project-d2epfvu0373796b";
 const BASE = process.env.CLOUDBASE_RDB_BASE || "https://" + ENV_ID + ".api.tcloudbasegateway.com/v1/rdb/rest";
 
-/** 底层 GET：拿到 2xx 的 JSON 数组，否则抛错（保留状态码便于日志） */
-function requestJson(pathAndQuery) {
+/**
+ * 底层请求：GET 读列表 / POST 写一行，共用同一套鉴权和错误翻译。
+ * 拿到 2xx 就 resolve 解析后的 JSON，否则 reject——错误上带 status，
+ * 让上层能把 409（唯一约束冲突）翻译成"重名了"这种人话。
+ */
+function request(method, pathAndQuery, bodyObj) {
   return new Promise(function (resolve, reject) {
     // 兼容两种来源：手动配的 CLOUDBASE_API_KEY，以及控制台「API Key 设置」开关
     // 自动注入的 CLOUDBASE_APIKEY（无下划线，后端专用）——两者任一存在即可
@@ -33,15 +37,23 @@ function requestJson(pathAndQuery) {
       return;
     }
 
+    const payload = bodyObj === undefined || bodyObj === null ? null : JSON.stringify(bodyObj);
+    const headers = {
+      Authorization: "Bearer " + apiKey,
+      Accept: "application/json",
+    };
+    if (payload !== null) {
+      headers["Content-Type"] = "application/json";
+      // 让 PostgREST 把写入后的整行原样返回，省掉"写完再查一次"的往返
+      headers["Prefer"] = "return=representation";
+    }
+
     const mod = BASE.indexOf("https:") === 0 ? https : http; // http 分支仅供本地测试桩使用
     const req = mod.request(
       BASE + pathAndQuery,
       {
-        method: "GET",
-        headers: {
-          Authorization: "Bearer " + apiKey,
-          Accept: "application/json",
-        },
+        method: method,
+        headers: headers,
       },
       function (res) {
         const chunks = [];
@@ -63,6 +75,8 @@ function requestJson(pathAndQuery) {
               msg = "数据库拒绝访问（HTTP " + res.statusCode + (gwCode ? " " + gwCode : "") + "）：API Key 缺失、无效或权限不足";
             } else if (res.statusCode === 404) {
               msg = "数据库接口不存在（HTTP 404" + (gwCode ? " " + gwCode : "") + "）：表名或路径可能不对";
+            } else if (res.statusCode === 409) {
+              msg = "数据库拒绝了这次写入（HTTP 409" + (gwCode ? " " + gwCode : "") + "）：多半是违反了唯一约束（同一板块下课程名重复）";
             } else {
               msg = "数据库请求失败（HTTP " + res.statusCode + (gwCode ? " " + gwCode : "") + "）" + (gwMsg ? "：" + gwMsg : "");
             }
@@ -85,8 +99,15 @@ function requestJson(pathAndQuery) {
       e3.expose = true;
       req.destroy(e3);
     });
+    // POST 的请求体必须显式写出去——只 set header 不 write，服务端收到的会是空 body
+    if (payload !== null) req.write(payload);
     req.end();
   });
+}
+
+/** GET 快捷方式（两个读接口一直在用） */
+function requestJson(pathAndQuery) {
+  return request("GET", pathAndQuery);
 }
 
 // ---------------------------------------------------------------- 行 → JSON 映射
@@ -152,4 +173,62 @@ async function listCourses(filter) {
   return rows.map(toCourse);
 }
 
-module.exports = { listCategories: listCategories, listCourses: listCourses };
+// ---------------------------------------------------------------- 写入相关（Day 18）
+
+/**
+ * 板块是否存在。返回 {id,name} 或 null。
+ * 写入前用：契约要求 categoryId 必须指向真实板块，不存在 → NOT_FOUND。
+ */
+async function findCategoryById(id) {
+  const params = new URLSearchParams();
+  params.set("select", "id,name");
+  params.set("id", "eq." + id);
+  params.set("limit", "1");
+  const rows = await requestJson("/categories?" + params.toString());
+  return rows && rows.length ? rows[0] : null;
+}
+
+/**
+ * 查重：同一板块下有没有同名课程。
+ *
+ * ⚠️ 为什么不能只靠数据库的 UNIQUE(category_id, name)：
+ * Postgres 的唯一约束**不把 NULL 视为重复**——「未归类」（category_id 为 null）的课程
+ * 可以存无数个同名行，约束拦不住。所以这里统一先查一次，两种情况都覆盖。
+ *
+ * @param {string} categoryId 板块 id；null / 空串表示查「未归类」
+ */
+async function findCourseByName(name, categoryId) {
+  const params = new URLSearchParams();
+  params.set("select", "id,name");
+  params.set("name", "eq." + name);
+  params.set("deleted_at", "is.null");
+  if (categoryId) params.set("category_id", "eq." + categoryId);
+  else params.set("category_id", "is.null");
+  params.set("limit", "1");
+
+  const rows = await requestJson("/courses?" + params.toString());
+  return rows && rows.length ? rows[0] : null;
+}
+
+/**
+ * 新增课程。row 用数据库列名（snake_case），返回 camelCase 的 JSON 对象。
+ * 靠 PostgREST 的 return=representation 一次拿到写入后的整行（含数据库默认值）。
+ */
+async function insertCourse(row) {
+  const result = await request("POST", "/courses", row);
+  const created = Array.isArray(result) ? result[0] : result;
+  if (!created || !created.id) {
+    const err = new Error("写入后没有拿到新行，请检查表结构或字段名");
+    err.expose = true;
+    throw err;
+  }
+  return toCourse(created);
+}
+
+module.exports = {
+  listCategories: listCategories,
+  listCourses: listCourses,
+  findCategoryById: findCategoryById,
+  findCourseByName: findCourseByName,
+  insertCourse: insertCourse,
+};

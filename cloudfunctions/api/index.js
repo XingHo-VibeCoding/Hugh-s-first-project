@@ -12,6 +12,10 @@ const { listCategories, listCourses } = require("./db");
 
 const SERVICE = "credit-planner";
 
+// GET /api/courses 的 limit 上限（契约第四节第 6 条定的 500）。
+// 超过上限一律 400，不做"悄悄截断"——截断会让前端以为数据只有这么多，比报错更难查。
+const MAX_LIMIT = 500;
+
 // ---------------------------------------------------------------- 响应封装
 
 /**
@@ -214,8 +218,8 @@ async function listCoursesHandler(queryParams) {
   let limit = null;
   if (limitRaw) {
     limit = Number(limitRaw);
-    if (!Number.isInteger(limit) || limit <= 0) {
-      return fail("limit 必须是正整数", 400, "VALIDATION_ERROR");
+    if (!Number.isInteger(limit) || limit <= 0 || limit > MAX_LIMIT) {
+      return fail("limit 必须是 1-" + MAX_LIMIT + " 的正整数", 400, "VALIDATION_ERROR");
     }
   }
 

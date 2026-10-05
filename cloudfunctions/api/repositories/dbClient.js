@@ -1,11 +1,15 @@
 /**
- * db.js —— 数据访问层（CloudBase PG 模式 · REST 网关版）
+ * repositories/dbClient.js —— 数据访问层的「连接工具」（最底层，不含任何业务查询）
+ *
+ * 它只干一件事：把一次数据库请求安全地发出去，并把失败翻译成人能看懂的中文。
+ * 这里**不认识 courses、categories 这些表名**，也不组装任何查询条件——
+ * 那是 repositories/categoriesRepository.js 和 coursesRepository.js 的活。
  *
  * ⚠️ 为什么不是 pg 直连：这个环境是 CloudBase「PG 模式」数据库（角色只有
  * anon / authenticated / service_role 等系统角色，控制台不提供数据库账号密码）。
  * 官方路径是：云函数 → REST 网关（https://<envId>.api.tcloudbasegateway.com/v1/rdb/rest/<表>）
  * 携带 API Key（对应 service_role，后端专用）。因此这里没有 SQL、没有连接池、
- * 也没有密码——密钥只放云函数环境变量 CLOUDBASE_API_KEY，绝不进仓库。
+ * 也没有密码——密钥只放云函数环境变量，绝不进仓库。
  *
  * 参数化说明：筛选条件全部走 URL 查询参数（PostgREST 语法），天然没有字符串拼接 SQL 的注入面。
  */
@@ -67,7 +71,7 @@ function request(method, pathAndQuery, bodyObj) {
             resolve(data);
           } else {
             // 错误信息写成"人能看懂的中文 + 关键线索"：调试期必须能一眼看出
-            // 是密钥问题（401/403）还是表路径问题（404）还是网关自身问题（5xx）
+            // 是密钥问题（401/403）还是表路径问题（404）还是约束冲突（409）还是网关自身问题（5xx）
             const gwCode = data && data.code ? String(data.code) : "";
             const gwMsg = data && data.message ? String(data.message).slice(0, 120) : "";
             let msg;
@@ -105,130 +109,9 @@ function request(method, pathAndQuery, bodyObj) {
   });
 }
 
-/** GET 快捷方式（两个读接口一直在用） */
+/** GET 快捷方式（所有读操作都走它） */
 function requestJson(pathAndQuery) {
   return request("GET", pathAndQuery);
 }
 
-// ---------------------------------------------------------------- 行 → JSON 映射
-// 数据库列是 snake_case，接口 JSON 是 camelCase（映射表见 api-contract.md 第二节）。
-// REST 网关返回的 numeric 同样是字符串（保精度），必须显式转数字。
-
-function toCategory(row) {
-  return {
-    id: row.id,
-    name: row.name,
-    requiredCredits:
-      row.required_credits === null || row.required_credits === undefined
-        ? null
-        : Number(row.required_credits),
-    note: row.note === null || row.note === undefined ? "" : row.note,
-  };
-}
-
-function toCourse(row) {
-  return {
-    id: row.id,
-    name: row.name,
-    credits: Number(row.credits),
-    categoryId: row.category_id, // 未归类就是 null
-    status: row.status,
-    score: row.score === null || row.score === undefined ? null : Number(row.score),
-  };
-}
-
-// ---------------------------------------------------------------- 业务查询
-
-/** 读板块列表（对应 GET /api/categories） */
-async function listCategories() {
-  const rows = await requestJson(
-    "/categories?select=id,name,required_credits,note&order=created_at,id"
-  );
-  return rows.map(toCategory);
-}
-
-/**
- * 读课程列表（对应 GET /api/courses）。
- * PostgREST 筛选语法：eq.=等于、is.null=为空、ilike.*xx*=模糊匹配（不区分大小写）
- */
-async function listCourses(filter) {
-  const params = new URLSearchParams();
-  params.set("select", "id,name,credits,category_id,status,score");
-  params.set("deleted_at", "is.null"); // 软删除的行不算数
-
-  if (filter.keyword) params.set("name", "ilike.*" + filter.keyword + "*");
-
-  if (filter.categoryId === "none") {
-    params.set("category_id", "is.null"); // 契约约定：none 表示"未归类"
-  } else if (filter.categoryId) {
-    params.set("category_id", "eq." + filter.categoryId);
-  }
-
-  if (filter.status) params.set("status", "eq." + filter.status);
-
-  params.set("order", "created_at,id"); // 先录入的在前，与第 2 周前端顺序一致
-  if (filter.limit) params.set("limit", String(filter.limit));
-
-  const rows = await requestJson("/courses?" + params.toString());
-  return rows.map(toCourse);
-}
-
-// ---------------------------------------------------------------- 写入相关（Day 18）
-
-/**
- * 板块是否存在。返回 {id,name} 或 null。
- * 写入前用：契约要求 categoryId 必须指向真实板块，不存在 → NOT_FOUND。
- */
-async function findCategoryById(id) {
-  const params = new URLSearchParams();
-  params.set("select", "id,name");
-  params.set("id", "eq." + id);
-  params.set("limit", "1");
-  const rows = await requestJson("/categories?" + params.toString());
-  return rows && rows.length ? rows[0] : null;
-}
-
-/**
- * 查重：同一板块下有没有同名课程。
- *
- * ⚠️ 为什么不能只靠数据库的 UNIQUE(category_id, name)：
- * Postgres 的唯一约束**不把 NULL 视为重复**——「未归类」（category_id 为 null）的课程
- * 可以存无数个同名行，约束拦不住。所以这里统一先查一次，两种情况都覆盖。
- *
- * @param {string} categoryId 板块 id；null / 空串表示查「未归类」
- */
-async function findCourseByName(name, categoryId) {
-  const params = new URLSearchParams();
-  params.set("select", "id,name");
-  params.set("name", "eq." + name);
-  params.set("deleted_at", "is.null");
-  if (categoryId) params.set("category_id", "eq." + categoryId);
-  else params.set("category_id", "is.null");
-  params.set("limit", "1");
-
-  const rows = await requestJson("/courses?" + params.toString());
-  return rows && rows.length ? rows[0] : null;
-}
-
-/**
- * 新增课程。row 用数据库列名（snake_case），返回 camelCase 的 JSON 对象。
- * 靠 PostgREST 的 return=representation 一次拿到写入后的整行（含数据库默认值）。
- */
-async function insertCourse(row) {
-  const result = await request("POST", "/courses", row);
-  const created = Array.isArray(result) ? result[0] : result;
-  if (!created || !created.id) {
-    const err = new Error("写入后没有拿到新行，请检查表结构或字段名");
-    err.expose = true;
-    throw err;
-  }
-  return toCourse(created);
-}
-
-module.exports = {
-  listCategories: listCategories,
-  listCourses: listCourses,
-  findCategoryById: findCategoryById,
-  findCourseByName: findCourseByName,
-  insertCourse: insertCourse,
-};
+module.exports = { request: request, requestJson: requestJson, BASE: BASE };

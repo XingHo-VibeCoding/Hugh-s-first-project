@@ -17,12 +17,13 @@
 | **剩余额度** | 功能用量概览：消耗 0 点（额度基本未动） | 控制台「环境 → 用量概览」 |
 | **套餐到期日期** | **2026-11-01 23:59:59** | 到期后公网不可用；**须在到期前手动续订（0 元）**，腾讯不会提前很久提醒 |
 | 云函数公网域名 | `https://my-first-project-d2epfvu0373796b-1489184401.ap-shanghai.app.tcloudbase.com` | HTTP 网关默认域名，另有独立有效期，到期在「HTTP 访问服务」点续期 |
-| 已实现接口 | `/api/health`、`GET /api/categories`、`GET /api/courses`、`POST /api/courses` | ✅ health 2026-10-01、两个读接口 2026-10-03、写入接口 2026-10-04 验证通过 |
+| 已实现接口 | `/api/health`、`GET /api/categories`、`GET /api/courses`、`POST /api/courses` | ✅ health 2026-10-01、两个读接口 2026-10-03、写入接口 2026-10-04 验证通过；Day 19 重构后 28 场景逐字节回归一致（2026-10-05） |
 | 静态托管公网地址 | `https://my-first-project-d2epfvu0373796b-1489184401.tcloudbaseapp.com` | 第 2 周页面（本机存储数据）已上线 |
 | 云数据库 | CloudBase **PostgreSQL**（Day 16 开通） | 表 `categories` / `courses` 已建；脚本 `db/schema.sql`、`db/seed.sql` 已入库 |
 | 云函数类型 | **普通云函数（事件函数）** | ⚠️ 选「HTTP 云函数」会导致网关 403，勿选 |
 | 后端接口部署形态 | **一路由一函数 + `API_ROUTE` 环境变量自报身份** | 本环境 HTTP 网关不向事件函数转发请求路径（event.path 恒为 `/`），单函数靠路径分发不可行；函数名 = 路由名：`api`(health) / `categories` / `courses`；API Key 走函数配置「API Key 设置」开关注入 `CLOUDBASE_APIKEY`（后端专用） |
-| CORS 跨域 | **未配置** | 今日不做，Day 16–20 处理 |
+| 后端代码分层 | **入口 / 业务 / 数据访问 三层**（Day 19 重构） | 入口 `index.js` → 业务 `services/courseService.js` → 数据访问 `repositories/*.js`（+ `dbClient.js` 连接工具）。⚠️ 部署 zip **必须保留 `repositories/`、`services/` 子目录**，压平会报 `Cannot find module`。分层说明见 `TECH_DESIGN.md` 第十五节 |
+| CORS 跨域 | **未配置** | ⚠️ **Day 20 第一件事**：给 `index.js` 的 `json()` 加三个 `Access-Control-*` 响应头。不配则前端页面（`*.tcloudbaseapp.com`）永远读不到云端数据（`*.service.tcloudbase.com`），Day 21「云端数据服务 v1」验收不成立 |
 
 ---
 

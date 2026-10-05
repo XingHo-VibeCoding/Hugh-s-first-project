@@ -1,26 +1,26 @@
-// Day 17｜HTTP 网关统一入口（学分规划助手 · credit-planner）
+// Day 19｜HTTP 网关入口层（学分规划助手 · credit-planner）
+//
+// 【本文件只做三件事】接请求、返响应、记日志。
+//   · 它不认识数据库表名（"categories" / "courses" 只出现在 repositories/）
+//   · 它不认识业务规则（"0.5 的倍数" / "30 个字" / "重名" 只出现在 services/）
+//   · 它不组装任何查询参数、不做任何字段校验
+//
+// 分层结构（Day 19 重构确立）：
+//   index.js                 入口层：解析 HTTP 请求、分发路由、包装响应
+//     └── services/          业务层：字段校验、调用顺序、错误措辞
+//           └── repositories/  数据访问层：表名、列名、查询条件
+//                 └── dbClient.js  连接工具：发请求、翻译网关错误
 //
 // 一个云函数接管所有接口：网关把 /api/xxx 的请求都转到这里，函数内部按「方法 + 路径」分发。
-// Day 17 只实现两个读接口：GET /api/categories、GET /api/courses。
-// Day 18 起加写入接口时，只要在 dispatch() 里加一个分支 + 一个 handler，不用再新建函数。
+// 加写入接口只要在 dispatch() 里加一个分支，不用新建云函数（Day 18 已验证）。
 //
 // 响应形状严格照 api-contract.md 第三节：
 //   成功 { ok: true, data: ... }
 //   失败 { ok: false, error: "中文说明" }
 
-const {
-  listCategories,
-  listCourses,
-  findCategoryById,
-  findCourseByName,
-  insertCourse,
-} = require("./db");
+const courseService = require("./services/courseService");
 
 const SERVICE = "credit-planner";
-
-// GET /api/courses 的 limit 上限（契约第四节第 6 条定的 500）。
-// 超过上限一律 400，不做"悄悄截断"——截断会让前端以为数据只有这么多，比报错更难查。
-const MAX_LIMIT = 500;
 
 // ---------------------------------------------------------------- 响应封装
 
@@ -55,8 +55,8 @@ function fail(message, statusCode, code) {
 }
 
 /**
- * 业务异常的收口。数据层（db.js）抛出的错误已写成"中文 + 关键线索"且不含密钥/堆栈，
- * 标记了 expose 的直接放行——调试期报错必须能看出是密钥问题还是路径问题；
+ * 业务异常的收口。数据层（repositories/dbClient.js）抛出的错误已写成"中文 + 关键线索"
+ * 且不含密钥/堆栈，标记了 expose 的直接放行——调试期报错必须能看出是密钥问题还是路径问题；
  * 其余未知异常对外只说人话，根因进日志。
  */
 function internalError(err, friendlyMessage) {
@@ -66,6 +66,17 @@ function internalError(err, friendlyMessage) {
     err && err.detail ? JSON.stringify(err.detail).slice(0, 300) : ""
   );
   return fail(err && err.expose ? err.message : friendlyMessage, 500, err && err.code);
+}
+
+/**
+ * 把业务层返回的结果翻成 HTTP 响应。
+ * 业务层只说"这条请求失败了、该说这句话"；状态码和 JSON 形状由入口层统一处理。
+ */
+function send(result, statusOnSuccess) {
+  if (courseService.isBusinessError(result)) {
+    return fail(result.message, result.httpStatus, result.code);
+  }
+  return ok(result, statusOnSuccess);
 }
 
 // ---------------------------------------------------------------- 请求解析
@@ -197,56 +208,13 @@ function firstValue(value) {
   return Array.isArray(value) ? value[0] : value;
 }
 
-// ---------------------------------------------------------------- 业务处理
-
-/** GET /api/health —— 心跳灯，不查数据库 */
-async function health() {
-  return json(200, { ok: true, service: SERVICE, time: new Date().toISOString() });
-}
-
-/** GET /api/categories —— 读板块列表 */
-async function listCategoriesHandler() {
-  try {
-    return ok(await listCategories());
-  } catch (err) {
-    return internalError(err, "读取板块列表失败，稍后再试");
-  }
-}
-
-/** GET /api/courses —— 读课程列表（keyword / categoryId / status / limit） */
-async function listCoursesHandler(queryParams) {
-  const keyword = (firstValue(queryParams.keyword) || "").trim();
-  const categoryId = (firstValue(queryParams.categoryId) || "").trim();
-  const status = (firstValue(queryParams.status) || "").trim();
-  const limitRaw = (firstValue(queryParams.limit) || "").trim();
-
-  if (status && status !== "done" && status !== "planned") {
-    return fail("状态参数只能是 done 或 planned", 400, "VALIDATION_ERROR");
-  }
-
-  let limit = null;
-  if (limitRaw) {
-    limit = Number(limitRaw);
-    if (!Number.isInteger(limit) || limit <= 0 || limit > MAX_LIMIT) {
-      return fail("limit 必须是 1-" + MAX_LIMIT + " 的正整数", 400, "VALIDATION_ERROR");
-    }
-  }
-
-  try {
-    return ok(await listCourses({ keyword: keyword, categoryId: categoryId, status: status, limit: limit }));
-  } catch (err) {
-    return internalError(err, "读取课程列表失败，稍后再试");
-  }
-}
-
-// ---------------------------------------------------------------- 写入：校验
-
 /**
  * 解析请求体。
  * 返回三种值，调用方据此区分：
  *   undefined = 有 body 但不是合法 JSON（400）
  *   null      = 根本没有 body（400，提示缺字段）
  *   其它      = 解析出的对象
+ * 这是 HTTP 层的关注点（传输格式），所以留在入口层；字段规则不在这里。
  */
 function parseJsonBody(req) {
   const raw = req.rawBody || "";
@@ -269,119 +237,7 @@ function parseJsonBody(req) {
   }
 }
 
-/**
- * 课程字段校验。契约第二节 + 第四节第 7 条。
- * 返回 { ok: true, value } 或 { ok: false, error }——error 一律点名"缺了什么 / 哪里不对"，
- * 不用"参数错误"这种让调用方猜的笼统话。
- */
-function validateCourse(body) {
-  // 课程名：必填、去空格后非空、≤30 字
-  const name = typeof body.name === "string" ? body.name.trim() : "";
-  if (!name) return { ok: false, error: "课程名不能为空" };
-  if (name.length > 30) {
-    return { ok: false, error: "课程名不能超过 30 个字（现在 " + name.length + " 个字）" };
-  }
-
-  // 学分：必填、>0、必须是 0.5 的倍数
-  if (body.credits === undefined || body.credits === null || body.credits === "") {
-    return { ok: false, error: "缺少必填字段 credits（学分）" };
-  }
-  const credits = Number(body.credits);
-  if (!isFinite(credits) || credits <= 0) {
-    return { ok: false, error: "学分必须是大于 0 的数字（现在收到的是「" + body.credits + "」）" };
-  }
-  if (Math.round(credits * 2) !== credits * 2) {
-    return { ok: false, error: "学分必须是 0.5 的倍数，例如 2、2.5、3（现在收到的是「" + body.credits + "」）" };
-  }
-
-  // 板块：键必须存在；值可以是 null（未归类）
-  if (!("categoryId" in body)) {
-    return { ok: false, error: "缺少必填字段 categoryId（板块 id；不属于任何板块就传 null）" };
-  }
-  let categoryId = null;
-  if (body.categoryId !== null && body.categoryId !== undefined && body.categoryId !== "") {
-    categoryId = String(body.categoryId).trim();
-    if (!categoryId) {
-      return { ok: false, error: "categoryId 不能是空字符串（不属于任何板块就传 null）" };
-    }
-  }
-
-  // 状态：必填，二选一
-  const status = typeof body.status === "string" ? body.status.trim() : "";
-  if (!status) return { ok: false, error: "缺少必填字段 status（只能是 done 或 planned）" };
-  if (status !== "done" && status !== "planned") {
-    return { ok: false, error: "状态只能是 done 或 planned（现在收到的是「" + body.status + "」）" };
-  }
-
-  // 成绩：选填；planned 时传了就报错（契约：planned 时不填）
-  let score = null;
-  if (body.score !== undefined && body.score !== null && body.score !== "") {
-    if (status === "planned") {
-      return { ok: false, error: "计划中的课程（status=planned）不能填成绩" };
-    }
-    score = Number(body.score);
-    if (!Number.isInteger(score) || score < 0 || score > 100) {
-      return { ok: false, error: "成绩必须是 0-100 的整数（现在收到的是「" + body.score + "」）" };
-    }
-  }
-
-  return { ok: true, value: { name: name, credits: credits, categoryId: categoryId, status: status, score: score } };
-}
-
-/** 服务端生成 id：k + 时间戳(36进制) + 4 位随机，远小于 varchar(32) 限制 */
-function newCourseId() {
-  return "k" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-}
-
-// ---------------------------------------------------------------- 写入：处理
-
-/** POST /api/courses —— 新增课程（校验 → 查板块 → 查重 → 写入） */
-async function createCourseHandler(req) {
-  const body = parseJsonBody(req);
-  if (body === undefined) return fail("请求体不是合法的 JSON", 400, "VALIDATION_ERROR");
-  if (body === null) {
-    return fail("请求体不能为空，需要提交 name、credits、categoryId、status 四个字段", 400, "VALIDATION_ERROR");
-  }
-
-  const checked = validateCourse(body);
-  if (!checked.ok) return fail(checked.error, 400, "VALIDATION_ERROR");
-  const input = checked.value;
-
-  const where = input.categoryId ? "板块 " + input.categoryId + " 下" : "未归类里";
-
-  try {
-    // ① 板块必须真实存在（未归类除外）
-    if (input.categoryId) {
-      const category = await findCategoryById(input.categoryId);
-      if (!category) return fail("板块不存在：" + input.categoryId, 404, "NOT_FOUND");
-    }
-
-    // ② 防重复：同板块（或未归类）下不能同名
-    const duplicated = await findCourseByName(input.name, input.categoryId);
-    if (duplicated) {
-      return fail(where + "已经有同名的课程了：" + input.name, 409, "VALIDATION_ERROR");
-    }
-
-    // ③ 写入
-    const created = await insertCourse({
-      id: newCourseId(),
-      name: input.name,
-      credits: input.credits,
-      category_id: input.categoryId,
-      status: input.status,
-      score: input.score,
-    });
-
-    console.log("[api] 新增课程成功", created.id, input.name, "板块=" + (input.categoryId || "未归类"));
-    return ok(created, 201);
-  } catch (err) {
-    // 数据库唯一约束兜底：万一两次请求并发穿过上面的查重，这里仍能给出人话
-    if (err && err.status === 409) {
-      return fail(where + "已经有同名的课程了：" + input.name, 409, "VALIDATION_ERROR");
-    }
-    return internalError(err, "保存课程失败，稍后再试");
-  }
-}
+// ---------------------------------------------------------------- 排错工具
 
 /**
  * 排错用：把网关传进来的 event 原样回显（脱敏后）。
@@ -448,23 +304,58 @@ async function dispatch(req) {
   const envRoute = (process.env.API_ROUTE || "").trim();
   const route = envRoute || routeFromPath(req.path);
 
-  if (route === "health") return health();
+  if (route === "health") {
+    return json(200, { ok: true, service: SERVICE, time: new Date().toISOString() });
+  }
 
   if (route === "categories") {
     if (req.method !== "GET") return fail("该接口只支持 GET 请求", 405, "VALIDATION_ERROR");
-    return listCategoriesHandler();
+    try {
+      return send(await courseService.listCategories());
+    } catch (err) {
+      return internalError(err, "读取板块列表失败，稍后再试");
+    }
   }
 
   if (route === "courses") {
     // 同一个路由两种动作：GET 读列表、POST 新增。因此不用为写入再建一个云函数。
-    if (req.method === "GET") return listCoursesHandler(req.query);
-    if (req.method === "POST") return createCourseHandler(req);
+    if (req.method === "GET") {
+      try {
+        return send(await courseService.listCourses({
+          keyword: firstValue(req.query.keyword) || "",
+          categoryId: firstValue(req.query.categoryId) || "",
+          status: firstValue(req.query.status) || "",
+          limit: firstValue(req.query.limit) || "",
+        }));
+      } catch (err) {
+        return internalError(err, "读取课程列表失败，稍后再试");
+      }
+    }
+    if (req.method === "POST") {
+      const body = parseJsonBody(req);
+      if (body === undefined) return fail("请求体不是合法的 JSON", 400, "VALIDATION_ERROR");
+      if (body === null) {
+        return fail("请求体不能为空，需要提交 name、credits、categoryId、status 四个字段", 400, "VALIDATION_ERROR");
+      }
+      try {
+        const result = await courseService.createCourse(body);
+        if (courseService.isBusinessError(result)) {
+          return fail(result.message, result.httpStatus, result.code);
+        }
+        console.log("[api] 新增课程成功", result.created.id, result.name, "板块=" + (result.categoryId || "未归类"));
+        return ok(result.created, 201);
+      } catch (err) {
+        return internalError(err, "保存课程失败，稍后再试");
+      }
+    }
     return fail("该接口只支持 GET 和 POST 请求", 405, "VALIDATION_ERROR");
   }
 
   // 以下都是「没认出来」的情况，按不同原因分别提示，方便一眼定位
   // ① 控制台手动点「测试」（event 什么都没有）→ 走 health，方便确认函数活着
-  if (!req.recognized && !req.looksLikeGateway) return health();
+  if (!req.recognized && !req.looksLikeGateway) {
+    return json(200, { ok: true, service: SERVICE, time: new Date().toISOString() });
+  }
 
   // ② 像网关请求但 event 里没有可用的路径字段 → 列出字段名，一次定位
   if (!req.recognized) {
@@ -496,7 +387,7 @@ exports.main = async function (event, context) {
   try {
     const req = parseRequest(event);
 
-    // 服务端日志（余力加练）：每个请求留一行痕迹，方便事后排查
+    // 服务端日志（Day 18 余力加练）：每个请求留一行痕迹，方便事后排查
     // ⚠️ 只记方法与长度，不记请求体内容——日志里不该出现任何业务数据
     console.log(
       "[api] 收到请求",

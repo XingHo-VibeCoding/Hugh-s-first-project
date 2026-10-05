@@ -413,6 +413,121 @@ CreditPlanner.loadData()
 - 面包屑 `<nav aria-label="当前位置">` 随视图更新，并用 `aria-live="polite"` 播报
 - 每个视图是 `role="region"` 且带 `aria-label`，键盘 Tab 可达
 
+## 十五、后端分层结构（Day 19 重构追加）
+
+Day 17–18 为了先跑通，数据库查询和接口逻辑混在一个文件里（`db.js` + `index.js`）。
+Day 19 做了一次**纯重构**：只搬代码、不改行为，把它们拆成三层。
+
+### 15.1 为什么要拆
+
+不拆的时候是这样的：
+
+- 想改「课程排序规则」→ 要打开写着 HTTP 解析的文件
+- 想改「课程名最多几个字」→ 也在同一个文件里
+- 改错了很难查，因为一个文件同时管三件事
+
+拆开的收益：**改哪一类问题，就只需要打开对应的那一层。**
+
+### 15.2 真实目录结构
+
+```
+cloudfunctions/api/
+├── index.js                          ← 入口层：接请求、返响应、记日志
+├── package.json                      ← 零依赖（走 REST 网关，不需要 pg）
+├── services/
+│   └── courseService.js              ← 业务层：字段校验、调用顺序、错误措辞
+└── repositories/
+    ├── dbClient.js                   ← 连接工具：发请求、把网关错误翻译成中文
+    ├── categoriesRepository.js       ← 板块表的数据访问
+    └── coursesRepository.js          ← 课程表的数据访问
+```
+
+> ⚠️ 部署时 zip **必须保留 repositories/ 和 services/ 这两层子目录**。
+> 云函数解压后是从自己的目录找 `require("./services/courseService")`，
+> 压平了会直接报 `Cannot find module`（Day 19 打包时已验证内部结构）。
+
+### 15.3 三层各自负责什么
+
+| 层 | 文件 | 只管这些 | 明确不许做这些 |
+|---|---|---|---|
+| 入口层 | `index.js` | 解析 HTTP 请求（路径/方法/query/body）、按路由分发、包装 `{ok,data,error}`、记日志、脱敏回显 | 不出现表名、不出现校验规则、不拼查询参数 |
+| 业务层 | `services/courseService.js` | 「先校验 → 再查板块 → 再查重 → 最后写入」这个顺序、每步失败该说什么中文话 | 不出现表名、不拼查询参数 |
+| 数据访问层 | `repositories/*.js` | 表名、列名、查询条件、snake_case→camelCase 映射、数字类型转换 | 不出现校验规则、不组装响应 |
+| 连接工具 | `repositories/dbClient.js` | 发 HTTP 请求、带 API Key、把 401/404/409/超时翻译成人话 | 不认识任何业务表 |
+
+### 15.4 分层示意图
+
+```
+浏览器
+   │  GET /api/courses?status=planned
+   ▼
+┌─────────────────────────────────────────────┐
+│ 入口层  index.js                             │
+│   · 从 event 里挖出 path / method / query    │
+│   · 路由：/api/health /categories /courses   │
+│   · 包装成 {ok:true,data} 或 {ok:false,error} │
+└───────────────┬─────────────────────────────┘
+                │  "给我 planned 的课程"
+                ▼
+┌─────────────────────────────────────────────┐
+│ 业务层  services/courseService.js            │
+│   · status 只允许 done/planned               │
+│   · limit 必须是 1-500 的正整数              │
+│   · 写入时：校验 → 板块存在? → 重名? → 写   │
+└───────────────┬─────────────────────────────┘
+                │  listCourses({status:'planned'})
+                ▼
+┌─────────────────────────────────────────────┐
+│ 数据访问层  repositories/coursesRepository.js│
+│   · 表名 courses、列名 category_id           │
+│   · deleted_at=is.null（软删除）             │
+│   · order=created_at,id                     │
+│   · credits 从 "3.5" 转成 3.5               │
+└───────────────┬─────────────────────────────┘
+                │  GET /courses?select=...&status=eq.planned
+                ▼
+┌─────────────────────────────────────────────┐
+│ 连接工具  repositories/dbClient.js           │
+│   · 拼 REST 网关地址、带 API Key             │
+│   · 401→"API Key 无效" 404→"表名可能不对"   │
+│            409→"违反了唯一约束"              │
+└───────────────┬─────────────────────────────┘
+                ▼
+        CloudBase PG 模式（REST 网关 → PostgreSQL）
+```
+
+### 15.5 判断分层到位的标准（可机器检测）
+
+在项目根目录跑：
+
+```bash
+# 入口层 + 业务层应该 0 次；数据访问层应该全部命中
+grep -oiE "\b(select|insert|update|where|order by|ilike|is\.null)\b" \
+  cloudfunctions/api/index.js \
+  cloudfunctions/api/services/courseService.js \
+  cloudfunctions/api/repositories/*.js | sort | uniq -c
+```
+
+- `index.js` → 0 次（表名 `categories` / `courses` 也不该出现）
+- `courseService.js` → 0 次（`select=xxx` 这种查询参数拼装不该出现）
+- `repositories/*.js` → 全部命中（它们本就该知道表结构）
+
+### 15.6 重构的铁律：行为必须一模一样
+
+重构不是改功能，是搬家。判断标准只有一条：**每个接口的返回逐字节一致。**
+
+Day 19 的验证办法（可复用）：
+
+1. 重构**前**把 28 个场景的真实返回抓下来存基线（正常 9 个 + 筛选 6 个 + 校验 10 个 + 路由 3 个）
+2. 重构并部署后重跑同一批场景
+3. 机器逐个 JSON 字符串对比，**全等才算通过**
+
+> ⚠️ 基线里不要放「真正写入成功」的请求——它会返回随机生成的 id，两边对不上。
+> 改用「必然被拒的重复提交」来验证写入分支，响应体不含随机值，可稳定对比。
+
+本地还可以复用 Day 18 的假网关脚本（`.workbuddy/tmp/local-test-day18.js`，36 项断言）：
+它只调用 `index.js` 入口，所以**重构后一行都不用改就该全过**——这本身就是行为不变的证据。
+
 ---
 
-> 本文档描述**怎么实现**；功能范围以 `PRD.md` 为准，数据从哪来、到哪去以本文档第六节为准，页面样式以本文档第十二节为准。二期相关内容仅作预留，不在一期范围内。
+> 本文档描述**怎么实现**；功能范围以 `PRD.md` 为准，数据从哪来、到哪去以本文档第六节为准，页面样式以本文档第十二节为准，后端分层以本文档第十五节为准。二期相关内容仅作预留，不在一期范围内。

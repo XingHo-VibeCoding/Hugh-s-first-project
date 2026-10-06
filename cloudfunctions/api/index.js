@@ -22,6 +22,65 @@ const courseService = require("./services/courseService");
 
 const SERVICE = "credit-planner";
 
+// ---------------------------------------------------------------- 跨域（CORS）
+
+/**
+ * Day 20：把静态托管页面的跨域请求放行。
+ *
+ * ⚠️ 为什么要在代码里加，而不是在控制台的「跨域配置」里配：
+ * 实测本环境的 HTTP 网关**不把 OPTIONS 预检请求转给云函数**（直接返回 405，
+ * 响应头 x-cloudbase-upstream-status-code 也是 405）。控制台那个跨域开关只对
+ * 「HTTP 云函数」有效，而我们是「普通云函数 + HTTP 网关」（Day 15 选 HTTP 云函数会 403）。
+ * 所以只能在函数自己返回的响应头里写。
+ *
+ * ⚠️ 为什么不写 `Access-Control-Allow-Origin: *`：
+ * 那样任何网站都能拿这个接口读写你的数据。等价于把数据库敞开给陌生人。
+ * 契约第三节的约定也要求写明来源域名，不许用通配符。
+ *
+ * 配置方式：环境变量 CORS_ALLOWED_ORIGIN 填允许的来源，多个用英文逗号分隔。
+ * 留空则回退到静态托管默认域名（最常见的情况，省事）。
+ */
+/**
+ * 允许的来源域名。
+ *
+ * ⚠️ 这里两个域名的数字不同，极易写错（写错会 418 / 跨域失败）：
+ *   静态托管（放页面）：…-1499184401.tcloudbaseapp.com   ← 默认来源
+ *   云函数 HTTP 网关：…-1489184401.ap-shanghai.app.tcloudbase.com  ← 接口地址
+ *
+ * 线上通过环境变量 CORS_ALLOWED_ORIGIN 覆盖（逗号分隔多个）。
+ * 留空才回退到下面这个默认值。
+ */
+const DEFAULT_ALLOWED_ORIGIN =
+  "https://my-first-project-d2epfvu0373796b-1499184401.tcloudbaseapp.com";
+
+function allowedOrigins() {
+  const raw = (process.env.CORS_ALLOWED_ORIGIN || "").trim();
+  const list = (raw || DEFAULT_ALLOWED_ORIGIN)
+    .split(",")
+    .map(function (s) { return s.trim(); })
+    .filter(function (s) { return s !== ""; });
+  return list;
+}
+
+/**
+ * 跨域响应头。
+ * - Allow-Origin：只回显白名单里的来源；不在白名单就不加这个头（浏览器自然会拦）
+ * - Allow-Methods / Allow-Headers：预检时告诉浏览器"这些方法/头我允许"
+ * - Max-Age：让浏览器缓存预检结果 10 分钟，避免每次请求都多一次 OPTIONS
+ */
+function corsHeaders(requestOrigin) {
+  const allowed = allowedOrigins();
+  const headers = {
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Max-Age": "600",
+  };
+  if (requestOrigin && allowed.indexOf(requestOrigin) >= 0) {
+    headers["Access-Control-Allow-Origin"] = requestOrigin;
+  }
+  return headers;
+}
+
 // ---------------------------------------------------------------- 响应封装
 
 /**
@@ -32,26 +91,29 @@ const SERVICE = "credit-planner";
  * 说明该环境网关不认集成响应 —— 把 json() 改成 `return payload;` 即可
  * （Day 15 的 health 就是靠直接返回对象跑通的）。
  */
-function json(statusCode, payload) {
+function json(statusCode, payload, requestOrigin) {
+  const base = { "Content-Type": "application/json; charset=utf-8" };
+  const cors = corsHeaders(requestOrigin);
+  Object.keys(cors).forEach(function (k) { base[k] = cors[k]; });
+
   return {
     isBase64Encoded: false,
     statusCode: statusCode,
-    headers: { "Content-Type": "application/json; charset=utf-8" },
-    // Day 18 前端接入时，在这里补 CORS 头（Access-Control-Allow-Origin 等）
+    headers: base,
     body: JSON.stringify(payload),
   };
 }
 
-function ok(data, statusCode) {
-  return json(statusCode || 200, { ok: true, data: data });
+function ok(data, statusCode, requestOrigin) {
+  return json(statusCode || 200, { ok: true, data: data }, requestOrigin);
 }
 
 /**
  * 失败响应。code 只进服务端日志（归类用），不返回给前端——契约第三节定的。
  */
-function fail(message, statusCode, code) {
+function fail(message, statusCode, code, requestOrigin) {
   console.error("[api] 失败", code || "INTERNAL", message);
-  return json(statusCode || 500, { ok: false, error: message });
+  return json(statusCode || 500, { ok: false, error: message }, requestOrigin);
 }
 
 /**
@@ -59,24 +121,24 @@ function fail(message, statusCode, code) {
  * 且不含密钥/堆栈，标记了 expose 的直接放行——调试期报错必须能看出是密钥问题还是路径问题；
  * 其余未知异常对外只说人话，根因进日志。
  */
-function internalError(err, friendlyMessage) {
+function internalError(err, friendlyMessage, requestOrigin) {
   console.error(
     "[api] 原始错误",
     err && err.message,
     err && err.detail ? JSON.stringify(err.detail).slice(0, 300) : ""
   );
-  return fail(err && err.expose ? err.message : friendlyMessage, 500, err && err.code);
+  return fail(err && err.expose ? err.message : friendlyMessage, 500, err && err.code, requestOrigin);
 }
 
 /**
  * 把业务层返回的结果翻成 HTTP 响应。
  * 业务层只说"这条请求失败了、该说这句话"；状态码和 JSON 形状由入口层统一处理。
  */
-function send(result, statusOnSuccess) {
+function send(result, statusOnSuccess, requestOrigin) {
   if (courseService.isBusinessError(result)) {
-    return fail(result.message, result.httpStatus, result.code);
+    return fail(result.message, result.httpStatus, result.code, requestOrigin);
   }
-  return ok(result, statusOnSuccess);
+  return ok(result, statusOnSuccess, requestOrigin);
 }
 
 // ---------------------------------------------------------------- 请求解析
@@ -190,6 +252,8 @@ function parseRequest(event) {
     path: stripped,
     method: method || "GET",
     query: queryString,
+    // 跨域用：请求方页面在哪个域名（可能来自 headers 或 multiValueHeaders，两边都找）
+    origin: headers["origin"] || headers["Origin"] || "",
     recognized: recognized,
     looksLikeGateway: looksLikeGateway,
     eventKeys: eventKeys,
@@ -282,6 +346,16 @@ function routeFromPath(path) {
 }
 
 async function dispatch(req) {
+  const origin = req.origin;
+
+  // 跨域预检（OPTIONS）：浏览器在真正发请求前会先问一句"我能不能发"。
+  // ⚠️ 本环境的网关不把 OPTIONS 转给云函数（实测直接 405），所以这段很可能不会被执行到。
+  // 但保留它有两个好处：① 万一日后网关支持了就能自动生效；② 万一请求真的到了，
+  //    我们会回一个"我允许"而不是让它掉进下面的 405 分支。真正解决问题的是下面 json() 里的响应头。
+  if (req.method === "OPTIONS") {
+    return json(204, null, origin);
+  }
+
   // 排错开关：DEBUG_EVENT=1 时原样回显 event（脱敏），用于确认网关到底传了什么
   if (process.env.DEBUG_EVENT === "1") {
     return json(200, {
@@ -295,7 +369,7 @@ async function dispatch(req) {
         ctxKeys: req.ctxKeys,
         event: redactedEvent(req.rawEvent),
       },
-    });
+    }, origin);
   }
 
   // 身份优先级：环境变量 API_ROUTE > event 里的路径。
@@ -305,15 +379,15 @@ async function dispatch(req) {
   const route = envRoute || routeFromPath(req.path);
 
   if (route === "health") {
-    return json(200, { ok: true, service: SERVICE, time: new Date().toISOString() });
+    return json(200, { ok: true, service: SERVICE, time: new Date().toISOString() }, origin);
   }
 
   if (route === "categories") {
-    if (req.method !== "GET") return fail("该接口只支持 GET 请求", 405, "VALIDATION_ERROR");
+    if (req.method !== "GET") return fail("该接口只支持 GET 请求", 405, "VALIDATION_ERROR", origin);
     try {
-      return send(await courseService.listCategories());
+      return send(await courseService.listCategories(), 200, origin);
     } catch (err) {
-      return internalError(err, "读取板块列表失败，稍后再试");
+      return internalError(err, "读取板块列表失败，稍后再试", origin);
     }
   }
 
@@ -326,35 +400,35 @@ async function dispatch(req) {
           categoryId: firstValue(req.query.categoryId) || "",
           status: firstValue(req.query.status) || "",
           limit: firstValue(req.query.limit) || "",
-        }));
+        }), 200, origin);
       } catch (err) {
-        return internalError(err, "读取课程列表失败，稍后再试");
+        return internalError(err, "读取课程列表失败，稍后再试", origin);
       }
     }
     if (req.method === "POST") {
       const body = parseJsonBody(req);
-      if (body === undefined) return fail("请求体不是合法的 JSON", 400, "VALIDATION_ERROR");
+      if (body === undefined) return fail("请求体不是合法的 JSON", 400, "VALIDATION_ERROR", origin);
       if (body === null) {
-        return fail("请求体不能为空，需要提交 name、credits、categoryId、status 四个字段", 400, "VALIDATION_ERROR");
+        return fail("请求体不能为空，需要提交 name、credits、categoryId、status 四个字段", 400, "VALIDATION_ERROR", origin);
       }
       try {
         const result = await courseService.createCourse(body);
         if (courseService.isBusinessError(result)) {
-          return fail(result.message, result.httpStatus, result.code);
+          return fail(result.message, result.httpStatus, result.code, origin);
         }
         console.log("[api] 新增课程成功", result.created.id, result.name, "板块=" + (result.categoryId || "未归类"));
-        return ok(result.created, 201);
+        return ok(result.created, 201, origin);
       } catch (err) {
-        return internalError(err, "保存课程失败，稍后再试");
+        return internalError(err, "保存课程失败，稍后再试", origin);
       }
     }
-    return fail("该接口只支持 GET 和 POST 请求", 405, "VALIDATION_ERROR");
+    return fail("该接口只支持 GET 和 POST 请求", 405, "VALIDATION_ERROR", origin);
   }
 
   // 以下都是「没认出来」的情况，按不同原因分别提示，方便一眼定位
   // ① 控制台手动点「测试」（event 什么都没有）→ 走 health，方便确认函数活着
   if (!req.recognized && !req.looksLikeGateway) {
-    return json(200, { ok: true, service: SERVICE, time: new Date().toISOString() });
+    return json(200, { ok: true, service: SERVICE, time: new Date().toISOString() }, origin);
   }
 
   // ② 像网关请求但 event 里没有可用的路径字段 → 列出字段名，一次定位
@@ -369,7 +443,7 @@ async function dispatch(req) {
         "｜query 键：" + req.queryKeys +
         "｜event 顶层字段：" + req.eventKeys +
         (req.ctxKeys ? "｜requestContext 字段：" + req.ctxKeys : ""),
-    });
+    }, origin);
   }
 
   // ③ 有路径但不认识 → 把路径值和字段名都带回来
@@ -378,7 +452,8 @@ async function dispatch(req) {
     "接口不存在：" + req.method + " " + req.path +
     "（event 顶层字段：" + req.eventKeys + "）",
     404,
-    "NOT_FOUND"
+    "NOT_FOUND",
+    origin
   );
 }
 
@@ -399,6 +474,7 @@ exports.main = async function (event, context) {
 
     return await dispatch(req);
   } catch (err) {
+    // 这里拿不到 req，用环境变量里的默认来源（此时几乎不会走到）
     return fail((err && err.message) || "服务出了点问题，稍后再试", 500, err && err.code);
   }
 };

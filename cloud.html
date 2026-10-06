@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>云端数据检查台 · 学分规划助手</title>
+<style>
+/* 检查台专用样式。配色与圆角沿用主页面 style.css 的设计 token，
+   保持同一个产品 look（TECH_DESIGN 第十二节）。 */
+:root{
+  --bg-page:#f6f6f4; --bg-panel:#ffffff; --bg-soft:#fbfbf9;
+  --border:#dcdcd6; --text-main:#2c2c2a; --text-soft:#5f5e5a; --text-hint:#6b6a65;
+  --accent:#185fa5;
+  --danger-bg:#fcebeb; --danger-border:#f09595; --danger-text:#a32d2d;
+  --warn-bg:#faeeda; --warn-text:#854f0b;
+  --ok-bg:#e1f5ee; --ok-text:#0f6e56;
+  --radius:12px;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; padding:0; background:var(--bg-page); color:var(--text-main);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  font-size:15px; line-height:1.6;
+}
+.wrap{max-width:960px;margin:0 auto;padding:24px 16px 64px}
+
+header{margin-bottom:20px}
+h1{font-size:24px;font-weight:600;margin:0 0 6px}
+.sub{color:var(--text-soft);font-size:14px;margin:0}
+.stamp{color:var(--text-hint);font-size:13px;margin-top:6px}
+
+.panel{
+  background:var(--bg-panel);border:1px solid var(--border);
+  border-radius:var(--radius);padding:18px 20px;margin-bottom:16px;
+}
+.panel h2{font-size:16px;font-weight:600;margin:0 0 4px}
+.hint{color:var(--text-hint);font-size:13px;margin:0 0 14px}
+
+/* 状态徽章 */
+.badge{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:3px 10px;border-radius:999px;font-size:13px;font-weight:500;
+}
+.badge.ok{background:var(--ok-bg);color:var(--ok-text)}
+.badge.warn{background:var(--warn-bg);color:var(--warn-text)}
+.badge.bad{background:var(--danger-bg);color:var(--danger-text)}
+.dot{width:8px;height:8px;border-radius:50%;background:currentColor}
+
+/* 检查项 */
+.checks{margin:14px 0 0;padding:0;list-style:none}
+.checks li{
+  display:flex;align-items:baseline;gap:10px;
+  padding:8px 0;border-top:1px solid var(--border);font-size:14px;
+}
+.checks li:first-child{border-top:none}
+.checks .name{flex:1;color:var(--text-main)}
+.checks .detail{color:var(--text-hint);font-size:13px;font-family:ui-monospace,Menlo,Consolas,monospace}
+
+/* 按钮 */
+button{
+  font:inherit;font-size:14px;padding:7px 14px;border-radius:8px;cursor:pointer;
+  border:1px solid var(--accent);background:var(--accent);color:#fff;
+}
+button.ghost{background:transparent;color:var(--accent)}
+button:disabled{opacity:.5;cursor:not-allowed}
+.btn-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px}
+
+/* 数据表 */
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--border);vertical-align:top}
+th{color:var(--text-soft);font-weight:600;font-size:13px}
+td.num{text-align:right;font-variant-numeric:tabular-nums}
+.pill{
+  display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;
+  background:var(--bg-soft);border:1px solid var(--border);color:var(--text-soft);
+}
+.pill.done{background:var(--ok-bg);color:var(--ok-text);border-color:transparent}
+.pill.none{color:var(--text-hint);font-style:italic}
+.scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+
+/* 结果区 */
+pre{
+  margin:12px 0 0;padding:12px;background:var(--bg-soft);
+  border:1px solid var(--border);border-radius:8px;
+  font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;
+  white-space:pre-wrap;word-break:break-all;max-height:280px;overflow:auto;
+  color:var(--text-soft);
+}
+.msg{margin-top:12px;padding:10px 12px;border-radius:8px;font-size:14px}
+.msg.ok{background:var(--ok-bg);color:var(--ok-text)}
+.msg.bad{background:var(--danger-bg);color:var(--danger-text);border:1px solid var(--danger-border)}
+.msg.warn{background:var(--warn-bg);color:var(--warn-text)}
+
+footer{margin-top:28px;padding-top:16px;border-top:1px solid var(--border);color:var(--text-hint);font-size:13px}
+footer a{color:var(--accent)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>云端数据检查台</h1>
+    <p class="sub">学分规划助手 · 展示数据库真实数据与接口健康状态</p>
+    <p class="stamp" id="stamp">正在连接…</p>
+  </header>
+
+  <section class="panel">
+    <h2>接口健康状态</h2>
+    <p class="hint">每一项都是刚刚真实发起的公网请求，不是读缓存。</p>
+    <ul class="checks" id="health-list"></ul>
+    <div class="btn-row">
+      <button id="btn-recheck">重新检查全部</button>
+      <span class="hint" style="margin:0">检查时间：<span id="checked-at">—</span></span>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>板块（categories 表 · 6 条）</h2>
+    <p class="hint">数据来自 CloudBase PostgreSQL，不是页面写死的示例。</p>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>ID</th><th>板块名</th><th class="num">要求学分</th><th>备注</th></tr></thead>
+        <tbody id="cat-body"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>课程（courses 表）</h2>
+    <p class="hint">
+      共 <span id="course-count">—</span> 门。
+      状态筛选：
+      <button class="ghost" data-filter="">全部</button>
+      <button class="ghost" data-filter="done">已修</button>
+      <button class="ghost" data-filter="planned">计划中</button>
+    </p>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>ID</th><th>课程名</th><th class="num">学分</th><th>板块</th><th>状态</th><th class="num">成绩</th></tr></thead>
+        <tbody id="course-body"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>写入测试（POST /api/courses）</h2>
+    <p class="hint">往数据库真实写一门课，写完立刻从上面的表格里能看到它。</p>
+    <div class="btn-row">
+      <button id="btn-write">写入一门测试课</button>
+      <button class="ghost" id="btn-dup">再写一次同名（测防重复）</button>
+      <button class="ghost" id="btn-missing">故意漏填课程名（测校验）</button>
+    </div>
+    <div id="write-msg"></div>
+    <pre id="write-out" hidden></pre>
+  </section>
+
+  <section class="panel">
+    <h2>接口原始返回</h2>
+    <p class="hint">用于核对：页面看到的和接口返回的是同一份数据。</p>
+    <div class="btn-row">
+      <button class="ghost" data-raw="health">/api/health</button>
+      <button class="ghost" data-raw="categories">/api/categories</button>
+      <button class="ghost" data-raw="courses">/api/courses</button>
+    </div>
+    <pre id="raw-out" hidden></pre>
+  </section>
+
+  <footer>
+    <p>接口基址：<span id="base-url" style="font-family:ui-monospace,Menlo,Consolas,monospace"></span></p>
+    <p>响应格式 <code>{ok:true,data}</code> / <code>{ok:false,error}</code>，形状以 <code>api-contract.md</code> 为准。</p>
+  </footer>
+
+</div>
+
+<script>
+/**
+ * 云端数据检查台（Day 20）
+ *
+ * 职责：证明「页面看到的数据 = 数据库里的真实数据」。
+ * 它是只读的诊断工具，不改动主页面，也不碰用户本机存储的数据。
+ *
+ * 接口基址说明：这里写的是公网地址而不是 localhost——
+ * 任务清单的检测 3 就是"请求地址必须是 https://…，出现 localhost 就算没切干净"。
+ */
+
+// ---------------------------------------------------------------- 接口基址
+// 想换环境就改这一处。⚠️ 必须是公网地址，不能写 localhost 或 127.0.0.1。
+var API_BASE = "https://my-first-project-d2epfvu0373796b.service.tcloudbase.com";
+// 静态托管的默认域名，用于填写 CORS 白名单。
+// ⚠️ 用 location.origin 自动取当前页面域名——页面部署到哪个域名下都能对上，
+// 不必在这里重复写一遍（写死反而容易改漏）。
+var SITE_ORIGIN = (location.protocol + "//" + location.host) || "（当前页面）";
+
+document.getElementById("base-url").textContent = API_BASE;
+
+var state = { courses: [], categories: [], filter: "" };
+
+// ---------------------------------------------------------------- 请求封装
+
+/**
+ * 调接口并统一处理三件事：
+ * 1. 超时兜底（15 秒）——网络卡住时给出人话，而不是转圈到天荒地老
+ * 2. 跨域失败单独识别 —— 这是今天最典型的坑，报错必须能一眼看出是跨域还是后端挂了
+ * 3. 按契约解析 {ok,data} / {ok,error}
+ */
+function api(path, options) {
+  var opts = options || {};
+  var url = API_BASE + path;
+
+  return new Promise(function (resolve) {
+    var timer = setTimeout(function () {
+      resolve({ ok: false, error: "请求超时（15 秒）。请检查网络或接口地址是否正确。" });
+    }, 15000);
+
+    fetch(url, {
+      method: opts.method || "GET",
+      headers: opts.body ? { "Content-Type": "application/json" } : {},
+      body: opts.body ? JSON.stringify(opts.body) : undefined,
+    })
+      .then(function (res) {
+        return res.text().then(function (text) {
+          try { return { status: res.status, json: JSON.parse(text) }; }
+          catch (e) { return { status: res.status, json: { __raw: text.slice(0, 300) } }; }
+        });
+      })
+      .then(function (r) {
+        clearTimeout(timer);
+        if (r.json && r.json.ok === true) {
+          resolve({ ok: true, data: r.json.data, status: r.status, time: r.json.time });
+        } else {
+          // 后端明确回的 {ok:false,error} —— 直接用它的中文提示
+          var msg = (r.json && r.json.error) || ("接口返回异常（HTTP " + r.status + "）");
+          resolve({ ok: false, error: msg, status: r.status });
+        }
+      })
+      .catch(function (err) {
+        clearTimeout(timer);
+        // 区分「跨域被拦」和「后端/网络挂了」——两者的排查方向完全不同
+        if (err && (err.message || "").indexOf("Failed to fetch") >= 0) {
+          resolve({
+            ok: false,
+            error:
+              "浏览器拦住了这个请求。最可能的原因是跨域：\n" +
+              "· 后端必须返回 Access-Control-Allow-Origin，且值要等于本页域名\n" +
+              "· 静态托管域名必须已在后端的 CORS 白名单里\n" +
+              "（当前页面域名：" + SITE_ORIGIN + "）",
+            cors: true,
+          });
+        } else {
+          resolve({ ok: false, error: "网络错误：" + (err && err.message ? err.message : String(err)) });
+        }
+      });
+  });
+}
+
+function stampNow() {
+  var d = new Date();
+  function p(n) { return n < 10 ? "0" + n : String(n); }
+  return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) +
+    " " + p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds());
+}
+
+// ---------------------------------------------------------------- 健康检查
+
+var HEALTH_ITEMS = [
+  { key: "health", label: "GET /api/health", path: "/api/health" },
+  { key: "categories", label: "GET /api/categories", path: "/api/categories" },
+  { key: "courses", label: "GET /api/courses", path: "/api/courses" },
+];
+
+function renderHealth(results) {
+  var box = document.getElementById("health-list");
+  box.innerHTML = "";
+  HEALTH_ITEMS.forEach(function (item) {
+    var r = results[item.key] || {};
+    var li = document.createElement("li");
+
+    var badge = document.createElement("span");
+    badge.className = "badge " + (r.ok ? "ok" : r.cors ? "warn" : "bad");
+    badge.innerHTML = '<span class="dot"></span>' + (r.ok ? "正常" : r.cors ? "跨域被拦" : "异常");
+
+    var name = document.createElement("span");
+    name.className = "name";
+    name.textContent = item.label;
+
+    var detail = document.createElement("span");
+    detail.className = "detail";
+    detail.textContent = r.ok
+      ? "HTTP " + r.status + (r.count !== undefined ? " · " + r.count + " 条 · " : " · ")
+      : (r.error || "").split("\n")[0].slice(0, 60);
+
+    li.appendChild(badge);
+    li.appendChild(name);
+    li.appendChild(detail);
+    box.appendChild(li);
+  });
+
+  var allOk = HEALTH_ITEMS.every(function (i) { return results[i.key] && results[i.key].ok; });
+  document.getElementById("stamp").textContent = allOk
+    ? "全部接口正常 · 最后更新 " + stampNow()
+    : "有接口异常 · 最后更新 " + stampNow();
+}
+
+function checkHealth() {
+  document.getElementById("checked-at").textContent = stampNow();
+  var results = {};
+  var jobs = HEALTH_ITEMS.map(function (item) {
+    return api(item.path).then(function (r) {
+      if (r.ok && Array.isArray(r.data)) r.count = r.data.length;
+      results[item.key] = r;
+    });
+  });
+  return Promise.all(jobs).then(function () {
+    renderHealth(results);
+    return results;
+  });
+}
+
+// ---------------------------------------------------------------- 渲染数据
+
+function categoryName(id) {
+  if (!id) return null;
+  for (var i = 0; i < state.categories.length; i++) {
+    if (state.categories[i].id === id) return state.categories[i].name;
+  }
+  return null;
+}
+
+function renderCategories() {
+  var body = document.getElementById("cat-body");
+  body.innerHTML = "";
+  state.categories.forEach(function (c) {
+    var tr = document.createElement("tr");
+    var req = c.requiredCredits === null ? "未设定" : c.requiredCredits;
+    tr.innerHTML =
+      "<td>" + c.id + "</td>" +
+      "<td>" + c.name + "</td>" +
+      "<td class='num'>" + req + "</td>" +
+      "<td>" + (c.note || "—") + "</td>";
+    body.appendChild(tr);
+  });
+}
+
+function renderCourses() {
+  var body = document.getElementById("course-body");
+  body.innerHTML = "";
+  var rows = state.filter
+    ? state.courses.filter(function (c) { return c.status === state.filter; })
+    : state.courses;
+
+  document.getElementById("course-count").textContent = rows.length;
+
+  rows.forEach(function (c) {
+    var tr = document.createElement("tr");
+    var cat = categoryName(c.categoryId);
+    var score = c.score === null ? "—" : c.score;
+    tr.innerHTML =
+      "<td>" + c.id + "</td>" +
+      "<td>" + c.name + "</td>" +
+      "<td class='num'>" + c.credits + "</td>" +
+      "<td>" + (cat ? cat : '<span class="pill none">未归类</span>') + "</td>" +
+      "<td><span class='pill" + (c.status === "done" ? " done" : "") + "'>" +
+        (c.status === "done" ? "已修" : "计划中") + "</span></td>" +
+      "<td class='num'>" + score + "</td>";
+    body.appendChild(tr);
+  });
+}
+
+// ---------------------------------------------------------------- 加载全部
+
+function loadAll() {
+  return checkHealth().then(function () {
+    return Promise.all([api("/api/categories"), api("/api/courses")]);
+  }).then(function (res) {
+    if (res[0].ok) { state.categories = res[0].data; renderCategories(); }
+    if (res[1].ok) { state.courses = res[1].data; renderCourses(); }
+  });
+}
+
+// ---------------------------------------------------------------- 写入测试
+
+function showWrite(okFlag, text, payload) {
+  var box = document.getElementById("write-msg");
+  var pre = document.getElementById("write-out");
+  box.className = "msg " + (okFlag ? "ok" : "bad");
+  box.textContent = text;
+  pre.hidden = false;
+  pre.textContent = JSON.stringify(payload === undefined ? null : payload, null, 2);
+}
+
+var TEST_COURSE = { name: "云端检查台测试课", credits: 2.5, categoryId: "c2", status: "done", score: 88 };
+
+function doWrite(body, expectText) {
+  api("/api/courses", { method: "POST", body: body }).then(function (r) {
+    showWrite(
+      r.ok,
+      (r.ok ? "✅ " : "❌ ") + (r.ok ? "写入成功：" + r.data.name + "（id " + r.data.id + "）" : r.error) + "　" + expectText,
+      r.ok ? { ok: true, data: r.data } : { ok: false, error: r.error }
+    );
+    // 无论成败都刷新列表：成功的要看到新行，失败的看到行数没变
+    return api("/api/courses");
+  }).then(function (r) {
+    if (r.ok) { state.courses = r.data; renderCourses(); }
+  });
+}
+
+document.getElementById("btn-write").addEventListener("click", function () {
+  var name = TEST_COURSE.name;
+  // 加时间后缀，避免第二次点时撞上防重复，看起来像"写入坏了"
+  var unique = name + " · " + new Date().toTimeString().slice(0, 8);
+  var payload = Object.assign({}, TEST_COURSE, { name: unique });
+  doWrite(payload, "这是正常写入，应返回 201 并立刻出现在上面的表格里。");
+});
+
+document.getElementById("btn-dup").addEventListener("click", function () {
+  // 先确保库里有一门同名课：有就复用，没有就先建一门
+  var existing = null;
+  for (var i = 0; i < state.courses.length; i++) {
+    if (state.courses[i].name === TEST_COURSE.name) { existing = state.courses[i]; break; }
+  }
+  if (!existing) {
+    doWrite(Object.assign({}, TEST_COURSE), "库里还没有这门课，刚才是正常写入。再点一次「再写一次同名」就能看到防重复。");
+    return;
+  }
+  api("/api/courses", { method: "POST", body: TEST_COURSE }).then(function (r) {
+    showWrite(!r.ok, (r.ok ? "❌ " : "✅ 防重复生效：") + r.error + "　正确表现是 409 拒绝、数据库行数不变。");
+  });
+});
+
+document.getElementById("btn-missing").addEventListener("click", function () {
+  // 故意不传 name —— 契约要求中文提示且能说出缺了什么
+  api("/api/courses", { method: "POST", body: { credits: 3, categoryId: "c2", status: "planned" } })
+    .then(function (r) {
+      showWrite(!r.ok, (r.ok ? "❌ " : "✅ 校验生效：") + (r.error || "") + "　正确表现是 400 拒绝，且提示里点名缺了课程名。");
+    });
+});
+
+// ---------------------------------------------------------------- 原始返回
+
+document.querySelectorAll("[data-raw]").forEach(function (btn) {
+  btn.addEventListener("click", function () {
+    var key = btn.getAttribute("data-raw");
+    var item = null;
+    HEALTH_ITEMS.forEach(function (h) { if (h.key === key) item = h; });
+    api(item.path).then(function (r) {
+      var pre = document.getElementById("raw-out");
+      pre.hidden = false;
+      pre.textContent = item.path + "\n" + JSON.stringify(r.ok ? { ok: true, data: r.data } : r, null, 2);
+    });
+  });
+});
+
+// ---------------------------------------------------------------- 状态筛选
+
+document.querySelectorAll("[data-filter]").forEach(function (btn) {
+  btn.addEventListener("click", function () {
+    state.filter = btn.getAttribute("data-filter");
+    renderCourses();
+  });
+});
+
+document.getElementById("btn-recheck").addEventListener("click", function () {
+  loadAll();
+});
+
+// ---------------------------------------------------------------- 启动
+loadAll();
+</script>
+</body>
+</html>

@@ -18,12 +18,13 @@
 | **套餐到期日期** | **2026-11-01 23:59:59** | 到期后公网不可用；**须在到期前手动续订（0 元）**，腾讯不会提前很久提醒 |
 | 云函数公网域名 | `https://my-first-project-d2epfvu0373796b-1489184401.ap-shanghai.app.tcloudbase.com` | HTTP 网关默认域名，另有独立有效期，到期在「HTTP 访问服务」点续期 |
 | 已实现接口 | `/api/health`、`GET /api/categories`、`GET /api/courses`、`POST /api/courses` | ✅ health 2026-10-01、两个读接口 2026-10-03、写入接口 2026-10-04 验证通过；Day 19 重构后 28 场景逐字节回归一致（2026-10-05） |
-| 静态托管公网地址 | `https://my-first-project-d2epfvu0373796b-1489184401.tcloudbaseapp.com` | 第 2 周页面（本机存储数据）已上线 |
+| 静态托管公网地址 | `https://my-first-project-d2epfvu0373796b-1499184401.tcloudbaseapp.com` | 第 2 周主页面（`index.html`，本机存储）已上线；Day 20 新增云端数据检查台 `…/cloud.html`（读真实数据库） |
+| 云端数据检查台 | `https://my-first-project-d2epfvu0373796b-1499184401.tcloudbaseapp.com/cloud.html` | Day 20 上线。三接口健康状态 + 板块/课程真实数据 + 写入测试入口（防重复、缺字段校验），公网实测三个接口全 200 |
 | 云数据库 | CloudBase **PostgreSQL**（Day 16 开通） | 表 `categories` / `courses` 已建；脚本 `db/schema.sql`、`db/seed.sql` 已入库 |
 | 云函数类型 | **普通云函数（事件函数）** | ⚠️ 选「HTTP 云函数」会导致网关 403，勿选 |
 | 后端接口部署形态 | **一路由一函数 + `API_ROUTE` 环境变量自报身份** | 本环境 HTTP 网关不向事件函数转发请求路径（event.path 恒为 `/`），单函数靠路径分发不可行；函数名 = 路由名：`api`(health) / `categories` / `courses`；API Key 走函数配置「API Key 设置」开关注入 `CLOUDBASE_APIKEY`（后端专用） |
 | 后端代码分层 | **入口 / 业务 / 数据访问 三层**（Day 19 重构） | 入口 `index.js` → 业务 `services/courseService.js` → 数据访问 `repositories/*.js`（+ `dbClient.js` 连接工具）。⚠️ 部署 zip **必须保留 `repositories/`、`services/` 子目录**，压平会报 `Cannot find module`。分层说明见 `TECH_DESIGN.md` 第十五节 |
-| CORS 跨域 | **未配置** | ⚠️ **Day 20 第一件事**：给 `index.js` 的 `json()` 加三个 `Access-Control-*` 响应头。不配则前端页面（`*.tcloudbaseapp.com`）永远读不到云端数据（`*.service.tcloudbase.com`），Day 21「云端数据服务 v1」验收不成立 |
+| CORS 跨域 | **已配置（Day 20）** | 在 `index.js` 的 `json()` 里加 `Access-Control-Allow-Origin / -Methods / -Headers / -Max-Age`。白名单由环境变量 `CORS_ALLOWED_ORIGIN` 控制（留空则回退静态托管默认域名），**禁止 `*` 通配符**。实测：白名单来源拿到头，`https://evil.example.com` 匹配 0 次。⚠️ **控制台那个「跨域配置」入口对本环境无效**——它是 HTTP 云函数专用的，本项目是普通云函数 + HTTP 网关，实测 `OPTIONS` 预检被网关直接挡掉（405），请求根本不到云函数 |
 
 ---
 
@@ -400,7 +401,7 @@
 |---|---|
 | 上述所有接口的实现 | Day 15 的任务只是"登记占位 + 证明部署链路通"，实现属 Day 16–20 |
 | 数据库建表 | 尚未到；且表结构已由本文档第二节确定，届时照此建 |
-| CORS 跨域配置 | 前端尚未真正调用后端接口，配了也验证不了；Day 16–20 一并处理 |
+| CORS 跨域配置 | ~~Day 15 不做~~ → **Day 20 已完成**，配置方式见第一节表格 |
 | 登录 / 鉴权 | 一期定位是免登录的轻体验（`research.md` 结论），不做也符合 smoketesting |
 | 本机数据迁移到云端 | 解决"换设备看不到数据"的痛点，但今天范围外 —— **登记为后续待办（第 4 周）** |
 

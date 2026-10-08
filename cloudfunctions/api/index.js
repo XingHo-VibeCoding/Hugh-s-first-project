@@ -19,6 +19,8 @@
 //   失败 { ok: false, error: "中文说明" }
 
 const courseService = require("./services/courseService");
+// Day 22：修改与删除的业务规则放在独立服务文件里，保持每个文件职责单一
+const courseEdit = require("./services/courseEditService");
 
 const SERVICE = "credit-planner";
 
@@ -422,7 +424,39 @@ async function dispatch(req) {
         return internalError(err, "保存课程失败，稍后再试", origin);
       }
     }
-    return fail("该接口只支持 GET 和 POST 请求", 405, "VALIDATION_ERROR", origin);
+    // Day 22：PATCH（改一条）与 DELETE（软删除 + 5 秒内可撤销）
+    if (req.method === "PATCH") {
+      const body = parseJsonBody(req);
+      if (body === undefined) return fail("请求体不是合法的 JSON", 400, "VALIDATION_ERROR", origin);
+      if (body === null) return fail("请求体不能为空，必须提交 id 指明要改哪一条", 400, "VALIDATION_ERROR", origin);
+      try {
+        const result = await courseEdit.updateCourse(body, courseService.validateCourse);
+        if (courseService.isBusinessError(result)) {
+          return fail(result.message, result.httpStatus, result.code, origin);
+        }
+        console.log("[api] 修改课程成功", result.updated.id, "改动字段=" + result.fields.join(","));
+        return ok(result.updated, 200, origin);
+      } catch (err) {
+        return internalError(err, "修改课程失败，稍后再试", origin);
+      }
+    }
+    if (req.method === "DELETE") {
+      const body = parseJsonBody(req);
+      // DELETE 允许没有 body（空 body 当成"没说要删哪条"→ 400 并说清楚）
+      if (body === undefined) return fail("请求体不是合法的 JSON", 400, "VALIDATION_ERROR", origin);
+      if (body === null) return fail("请求体不能为空，必须提交 id 指明要删哪一条", 400, "VALIDATION_ERROR", origin);
+      try {
+        const result = await courseEdit.deleteCourse(body);
+        if (courseService.isBusinessError(result)) {
+          return fail(result.message, result.httpStatus, result.code, origin);
+        }
+        console.log("[api] 删除课程成功", result.id, "可在 " + courseEdit.RESTORE_WINDOW_SECONDS + " 秒内撤销");
+        return ok({ id: result.id, deleted: true, restoreBefore: result.restoreBefore }, 200, origin);
+      } catch (err) {
+        return internalError(err, "删除课程失败，稍后再试", origin);
+      }
+    }
+    return fail("该接口只支持 GET、POST、PATCH、DELETE 请求", 405, "VALIDATION_ERROR", origin);
   }
 
   // 以下都是「没认出来」的情况，按不同原因分别提示，方便一眼定位

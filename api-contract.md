@@ -17,7 +17,7 @@
 | **剩余额度** | 功能用量概览：消耗 0 点（额度基本未动） | 控制台「环境 → 用量概览」 |
 | **套餐到期日期** | **2026-11-01 23:59:59** | 到期后公网不可用；**须在到期前手动续订（0 元）**，腾讯不会提前很久提醒 |
 | 云函数公网域名 | `https://my-first-project-d2epfvu0373796b-1489184401.ap-shanghai.app.tcloudbase.com` | HTTP 网关默认域名，另有独立有效期，到期在「HTTP 访问服务」点续期 |
-| 已实现接口 | `/api/health`、`GET /api/categories`、`GET /api/courses`、`POST /api/courses` | ✅ health 2026-10-01、两个读接口 2026-10-03、写入接口 2026-10-04 验证通过；Day 19 重构后 28 场景逐字节回归一致（2026-10-05） |
+| 已实现接口 | `/api/health`、`GET /api/categories`、`GET /api/courses`、`POST /api/courses`、`PATCH /api/courses`、`DELETE /api/courses` | ✅ health 2026-10-01、两个读接口 2026-10-03、写入接口 2026-10-04 验证通过；Day 19 重构后 28 场景逐字节回归一致（2026-10-05）；**PATCH/DELETE 2026-10-08 验证通过** |
 | 静态托管公网地址 | `https://my-first-project-d2epfvu0373796b-1499184401.tcloudbaseapp.com` | 第 2 周主页面（`index.html`，本机存储）已上线；Day 20 新增云端数据检查台 `…/cloud.html`（读真实数据库） |
 | 云端数据检查台 | `https://my-first-project-d2epfvu0373796b-1499184401.tcloudbaseapp.com/cloud.html` | Day 20 上线。三接口健康状态 + 板块/课程真实数据 + 写入测试入口（防重复、缺字段校验），公网实测三个接口全 200 |
 | 云数据库 | CloudBase **PostgreSQL**（Day 16 开通） | 表 `categories` / `courses` 已建；脚本 `db/schema.sql`、`db/seed.sql` 已入库 |
@@ -104,9 +104,9 @@
 | 5 | DELETE | `/api/categories/:id` | ⬜ 占位 |
 | 6 | GET | `/api/courses` | ✅ 已实现（Day 17） |
 | 7 | POST | `/api/courses` | ✅ 已实现（Day 18） |
-| 8 | PATCH | `/api/courses/:id` | ⬜ 占位 |
-| 9 | DELETE | `/api/courses/:id` | ⬜ 占位（软删除） |
-| 10 | POST | `/api/courses/:id/restore` | ⬜ 占位（撤销删除） |
+| 8 | PATCH | `/api/courses`（id 在请求体） | ✅ 已实现（Day 22） |
+| 9 | DELETE | `/api/courses`（id 在请求体） | ✅ 已实现（Day 22，软删除） |
+| 10 | POST | `/api/courses`（action=restore，id 在请求体） | ⬜ **未实现**：数据层+业务层已就绪，入口层未接路由（Day 22 顺延） |
 | 11 | GET | `/api/summary` | ⬜ 占位 |
 | 12 | POST | `/api/seed` | ⬜ 占位（候选，可能本周不实现） |
 
@@ -282,14 +282,19 @@
 
 对应页面动作：课程卡片上的「修改」。
 
-- **请求参数**：路径参数 `id` 必填
-- **请求体**：任意待改字段（name / credits / categoryId / status / score，校验同第 7 条的表）
+- **请求体**：必须含 `id`（要改哪一条）+ 任意待改字段（name / credits / categoryId / status / score，校验同第 7 条的表）
+- ⚠️ **为什么 id 放请求体而不是路径参数**（Day 22 实测后改）：本环境的 HTTP 网关会把 `/api/courses/k01` **当成 `/api/courses`** 处理并返回整个列表——实测 `GET /api/courses/k01` 与 `?id=k01` 都拿不到 id。这与 Day 17 发现的"网关不转发路径"是同一个限制。既然拿不到路径参数，id 只能走请求体 / 查询串。
 - **成功 200**：`"data"` 为修改后的完整课程
 
 ```json
 { "ok": true, "data": { "id": "k1", "name": "高等数学", "credits": 4, "categoryId": "c1", "status": "done", "score": 92 } }
 ```
 - **错误**：`NOT_FOUND`、`VALIDATION_ERROR`、`INTERNAL`
+- **代码实现**：`repositories/coursesRepository.js` 的 `findCourseById` / `updateCourse`；业务规则在 `services/courseEditService.js` 的 `updateCourse`（含"改名后重新查重"这一步）
+- **⚠️ 改动时容易漏的两点**：
+  1. **改名 / 换板块后必须重新查重**。原来叫「线性代数」改成「高等数学A」会撞上已有的同名课。数据库的 UNIQUE 会兜底，但那时的错误是英文 409，得自己翻译成中文。
+  2. **未传的字段用原值补齐后再整体校验**。否则"把 done 改成 planned 但成绩还是 95"这种组合错误会漏过去。
+- **验证记录**（2026-10-08 公网实测）：`PATCH {"id":"k08","score":66,"name":"艺术鉴赏（已改）"}` → 200，GET 读回已是新值（seed 原值是「艺术鉴赏」/85，接口现返回改后值）；防呆 11 类全部返回 404/400 中文提示，**零 500**（不存在的 id / 缺 id / id 是空格 / 只给 id 无字段 / 学分非 0.5 倍数 / 板块不存在 / 非法 JSON / 空 body）
 
 ---
 
@@ -297,7 +302,8 @@
 
 对应页面动作：点删除。**为支持"5 秒撤销"，后端采用软删除**：记录仍留在表里，只是标记为已删，不在列表接口返回。
 
-- **请求参数**：路径参数 `id` 必填；**请求体**：无
+- **请求体**：`{"id": "k01"}`（id 必填）
+- ⚠️ 同第 8 条：路径参数在本环境拿不到，id 改走请求体
 - **成功 200**：
 
 ```json
@@ -307,6 +313,9 @@
   - `restoreBefore` = 可撤销的截止时间（本项目定 5 秒）
 - **错误**：`NOT_FOUND`、`INTERNAL`
 - 超过 5 秒后若前端仍发 Restore → `NOT_FOUND`
+- **代码实现**：`repositories/coursesRepository.js` 的 `softDeleteCourse`（并发保护：只命中 `deleted_at IS NULL` 的行）；业务规则在 `services/courseEditService.js` 的 `deleteCourse`
+- **为什么软删除**（余力加练已完成）：删除不可逆，删错了就没了。建表时（`db/schema.sql` 第 55–56 行）就预留了 `deleted_at` / `delete_expires_at` 两列，这里只打标记，数据行仍在表里；列表接口的 `deleted_at=is.null` 自动跳过它。**5 秒内可反悔。**
+- **验证记录**（2026-10-08 公网实测）：`DELETE {"id":"k08"}` → 200，返回 `{"deleted":true,"restoreBefore":"…"}`；GET 重新拉取该条已消失（行数 15 → 14）；**重复删同一条 → 404「这条课程已经被删过了（删除时间 …）」，不假装又成功一次**
 
 ---
 
@@ -314,7 +323,8 @@
 
 对应页面动作：删除后底部那条 5 秒进度条上的「撤销」。
 
-- **请求参数**：路径参数 `id` 必填；**请求体**：无
+- **请求体**：`{"id": "k01"}`（id 必填）
+- ⚠️ 同第 8 条：路径参数在本环境拿不到，id 改走请求体
 - **成功 200**：
 
 ```json

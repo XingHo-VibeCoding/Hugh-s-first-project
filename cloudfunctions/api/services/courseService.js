@@ -27,10 +27,18 @@ function businessError(message, httpStatus, code) {
  * 参数校验属于业务规则，所以放这里；SQL 拼装属于数据访问层，在 coursesRepository 里。
  */
 async function listCourses(query) {
-  const keyword = (query.keyword || "").trim();
-  const categoryId = (query.categoryId || "").trim();
-  const status = (query.status || "").trim();
-  const limitRaw = (query.limit || "").trim();
+  // ⚠️ 别假设 query 里的值一定是字符串。真实前端如果写 `?limit=1`（不带引号），
+  //   网关解析后可能是数字；`(123 || "").trim()` 会直接抛 TypeError → 整个请求 500。
+  //   Day 22 本地测试就是这么抓到的。所以这里统一先转成字符串。
+  const asText = function (v) {
+    if (v === undefined || v === null) return "";
+    return String(v).trim();
+  };
+
+  const keyword = asText(query.keyword);
+  const categoryId = asText(query.categoryId);
+  const status = asText(query.status);
+  const limitRaw = asText(query.limit);
 
   if (status && status !== "done" && status !== "planned") {
     return businessError("状态参数只能是 done 或 planned", 400, "VALIDATION_ERROR");

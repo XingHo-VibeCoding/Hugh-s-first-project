@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>云端数据检查台 · 学分规划助手</title>
+<!-- 空 favicon：浏览器会默认请求 /favicon.ico，404 会在 Console 里留一条红字。
+     声明一个空图标即可消掉这条噪音，避免真报错被淹没。 -->
+<link rel="icon" href="data:,">
 <style>
 /* 检查台专用样式。配色与圆角沿用主页面 style.css 的设计 token，
    保持同一个产品 look（TECH_DESIGN 第十二节）。 */
@@ -285,9 +288,15 @@ function renderHealth(results) {
 
     var detail = document.createElement("span");
     detail.className = "detail";
-    detail.textContent = r.ok
-      ? "HTTP " + r.status + (r.count !== undefined ? " · " + r.count + " 条 · " : " · ")
-      : (r.error || "").split("\n")[0].slice(0, 60);
+    // 有条数就显示「HTTP 200 · 13 条」，没有（像 health 返回对象）就只显示状态码。
+    // ⚠️ 别写成 `… + " · "` 这种以分隔符结尾的形式：那会在没有条数时留一个孤零零的尾巴。
+    if (!r.ok) {
+      detail.textContent = (r.error || "").split("\n")[0].slice(0, 60);
+    } else if (r.count !== undefined) {
+      detail.textContent = "HTTP " + r.status + " · " + r.count + " 条";
+    } else {
+      detail.textContent = "HTTP " + r.status;
+    }
 
     li.appendChild(badge);
     li.appendChild(name);
@@ -423,7 +432,12 @@ document.getElementById("btn-dup").addEventListener("click", function () {
     return;
   }
   api("/api/courses", { method: "POST", body: TEST_COURSE }).then(function (r) {
-    showWrite(!r.ok, (r.ok ? "❌ " : "✅ 防重复生效：") + r.error + "　正确表现是 409 拒绝、数据库行数不变。");
+    // ⚠️ 别直接把 r.error 拼进提示：写入"成功"时它不存在，字符串一拼就显示 undefined。
+    //   这种情况本身是异常（说明防重复失效了），要如实说，不要用 undefined 糊弄过去。
+    var text = r.ok
+      ? "❌ 防重复没生效：接口居然接受了同名课程（HTTP " + r.status + "，id " + (r.data && r.data.id) + "），这是 bug，请报给开发者。"
+      : "✅ 防重复生效：" + r.error + "　正确表现是 409 拒绝、数据库行数不变。";
+    showWrite(!r.ok, text, r.ok ? { unexpected: true, response: r.data } : { ok: false, error: r.error });
   });
 });
 

@@ -36,7 +36,11 @@ function request(method, pathAndQuery, bodyObj) {
         "云函数缺少 API Key：请开启函数配置里的「API Key 设置」开关（选后端专用），或手动添加环境变量 CLOUDBASE_API_KEY"
       );
       missing.code = "INTERNAL";
-      missing.expose = true;
+        // ⚠️ Day 23 修正：这是**部署配置问题**，用户改不了什么。
+        //   原文（「请开启 API Key 设置开关…」）是给部署者看的指引，
+        //   原样返回只会让用户以为自己操作错了。expose=false → 只进日志。
+        missing.expose = false;
+        missing.kind = "DB_UNREACHABLE";
       reject(missing);
       return;
     }
@@ -75,7 +79,11 @@ function request(method, pathAndQuery, bodyObj) {
             const gwCode = data && data.code ? String(data.code) : "";
             const gwMsg = data && data.message ? String(data.message).slice(0, 120) : "";
             let msg;
-            if (res.statusCode === 401 || res.statusCode === 403) {
+              if (res.statusCode === 401 || res.statusCode === 403) {
+                // ⚠️ Day 23 修正：**不拼 gwCode**。它是网关内部错误码
+                //   （如 MISSING_CREDENTIALS），对用户毫无意义，只会让人以为接口坏了。
+                //   完整 code 留在 err.detail 里供查日志。
+                msg = "数据库拒绝访问（HTTP " + res.statusCode + "）：API Key 缺失、无效或权限不足";
               msg = "数据库拒绝访问（HTTP " + res.statusCode + (gwCode ? " " + gwCode : "") + "）：API Key 缺失、无效或权限不足";
             } else if (res.statusCode === 404) {
               msg = "数据库接口不存在（HTTP 404" + (gwCode ? " " + gwCode : "") + "）：表名或路径可能不对";
@@ -97,7 +105,11 @@ function request(method, pathAndQuery, bodyObj) {
             const err = new Error(msg);
             err.status = res.statusCode;
             err.detail = data;
-            err.expose = true; // 中文 + 关键线索，可直接返回给调用方
+            // ⚠️ Day 23 调整边界：这里的消息已全部是「中文 + 不含内部术语」，
+            //   所以仍可安全外露（用户看到的是"数据库拒绝访问…请检查 API Key"这类话，
+            //   而不是 MISSING_CREDENTIALS / PGRST205 这种内部码）。
+            //   前提：上面各分支都不能拼 gwCode / gwMsg —— 已逐一核对过。
+            err.expose = true;
             // Day 23：给内部错误打上分类标记。上层据此给前端不同的中文说明，
             // 但**绝不把 kind 本身返回给前端**——它是内部排查用的。
             err.kind =

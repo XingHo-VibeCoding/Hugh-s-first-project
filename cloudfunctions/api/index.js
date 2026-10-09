@@ -23,6 +23,8 @@ const courseService = require("./services/courseService");
 const courseEdit = require("./services/courseEditService");
 // Day 23：写接口限流（护栏，防止接口被灌垃圾数据）
 const rateLimiter = require("./services/rateLimiter");
+// Day 23：三类错误的统一中文提示（用户输入错 / 网络错 / 服务端错）
+const errText = require("./services/errorResponses");
 
 const SERVICE = "credit-planner";
 
@@ -141,7 +143,7 @@ const DB_ERROR_TEXT = {
 };
 
 function internalError(err, friendlyMessage, requestOrigin) {
-  // kind 只进日志——这是排查的唯一线索，必须留下
+  // 完整上下文只进日志——这是排查的唯一线索
   console.error(
     "[api] 原始错误",
     err && err.kind ? "[" + err.kind + "]" : "",
@@ -149,18 +151,21 @@ function internalError(err, friendlyMessage, requestOrigin) {
     err && err.detail ? JSON.stringify(err.detail).slice(0, 300) : ""
   );
 
-  // 情况一：数据层主动抛出、且已标记 expose（如"API Key 无效"这类可安全外露的）
-  //         → 直接用它自己的中文消息，那里面有排查线索
+  // ① 数据层标记为「可安全外露」的（消息已确认是中文且无内部术语）
+  //    例：401 → 「数据库拒绝访问：API Key 缺失、无效或权限不足」
   if (err && err.expose) {
     return fail(err.message, 500, err.kind || err.code, requestOrigin);
   }
 
-  // 情况二：网络类故障（连不上 / 超时 / 服务端 5xx）→ 按 kind 给更具体的中文说明
-  if (err && err.kind && DB_ERROR_TEXT[err.kind]) {
-    return fail(DB_ERROR_TEXT[err.kind], 503, err.kind, requestOrigin);
+  // ② 网络 / 接口错：按 kind 给具体但不含技术细节的中文说明
+  if (err && err.kind) {
+    const mapped = errText.fromInternalKind(err.kind, friendlyMessage);
+    console.error("[api] 归类为网络/接口错", mapped.category);
+    return fail(mapped.error, 503, err.kind, requestOrigin);
   }
 
-  // 情况三：未预期的其它错误 → 最保守的一句话
+  // ③ 服务端错：只给一句话
+  console.error("[api] 归类为服务端错（未预期）");
   return fail(friendlyMessage, 500, (err && err.code) || "INTERNAL", requestOrigin);
 }
 

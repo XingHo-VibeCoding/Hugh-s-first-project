@@ -54,6 +54,14 @@ function inputError(message, status) {
 /**
  * 第二类：网络 / 接口错。
  *
+ * ⚠️ 这里有个刻意的取舍（Day 23 想清楚的）：
+ *   数据库 401（API Key 无效/缺失）在**技术上**是配置问题，不是网络问题。
+ *   但对外**不说「API Key 无效」**，理由有二：
+ *     ① 泄露了"系统用了 API Key"这个实现细节
+ *     ② 普通用户看到会以为是自己操作错了，反复重试却永远不会好
+ *   部署者要排查怎么办？→ **看服务端日志**，那里有 [DB_UNREACHABLE] + 完整原文。
+ *   所以文案末尾统一带一句「若持续失败请联系部署者」，给两边都留了出路。
+ *
  * @param {string} message 中文说明（不含量内部术语）
  * @param {string} kind   DB_UNREACHABLE / DB_TIMEOUT / DB_SERVER_ERROR（只进日志）
  */
@@ -63,7 +71,7 @@ function networkError(message, kind) {
     error: message,
     category: "NETWORK", // ← 只进日志
     kind: kind || "NETWORK",
-    suggestion: "稍后重试",
+    suggestion: "稍后重试；若持续失败请联系部署者",
   };
 }
 
@@ -87,7 +95,7 @@ function serverError(friendlyMessage) {
  * 集中在这里，避免"某个 kind 忘了翻"导致回落到笼统提示。
  */
 const NETWORK_TEXTS = {
-  DB_UNREACHABLE: "数据库暂时连不上，请稍后再试",
+  DB_UNREACHABLE: "数据库暂时连不上，请稍后再试",  // 不说"API Key"是刻意的，见上方注释
   DB_TIMEOUT: "数据库响应超时，请稍后再试",
   DB_SERVER_ERROR: "数据库服务暂时异常，请稍后再试",
   DB_NOT_FOUND: "数据库访问异常，请稍后再试",

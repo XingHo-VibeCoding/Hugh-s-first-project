@@ -79,37 +79,28 @@ function request(method, pathAndQuery, bodyObj) {
             const gwCode = data && data.code ? String(data.code) : "";
             const gwMsg = data && data.message ? String(data.message).slice(0, 120) : "";
             let msg;
+              // ═══ Day 23 重写：所有分支一律不拼 gwCode / gwMsg ═══
+              // 理由：它们是网关/PostgreSQL 的内部错误码（MISSING_CREDENTIALS、PGRST205…），
+              // 对用户毫无意义，只会让人以为接口坏了。完整 code+message 留在 err.detail。
               if (res.statusCode === 401 || res.statusCode === 403) {
-                // ⚠️ Day 23 修正：**不拼 gwCode**。它是网关内部错误码
-                //   （如 MISSING_CREDENTIALS），对用户毫无意义，只会让人以为接口坏了。
-                //   完整 code 留在 err.detail 里供查日志。
-                msg = "数据库拒绝访问（HTTP " + res.statusCode + "）：API Key 缺失、无效或权限不足";
-              msg = "数据库拒绝访问（HTTP " + res.statusCode + (gwCode ? " " + gwCode : "") + "）：API Key 缺失、无效或权限不足";
-            } else if (res.statusCode === 404) {
-              msg = "数据库接口不存在（HTTP 404" + (gwCode ? " " + gwCode : "") + "）：表名或路径可能不对";
-            } else if (res.statusCode === 409) {
-              msg = "数据库拒绝了这次写入（HTTP 409" + (gwCode ? " " + gwCode : "") + "）：多半是违反了唯一约束（同一板块下课程名重复）";
-            } else if (res.statusCode >= 500) {
-              // ⚠️ Day 23 修正：**不要把网关的 message 原文拼进对外消息**。
-              //   实测发现网关 500 会带 message（如 "db exploded"），
-              //   原样返回等于把数据库内部的英文报错泄露给用户。
-              //   → 对外只说 HTTP 状态码；gwMsg 仅写进 err.detail（服务端日志可见）。
-              // gwCode（网关/PostgreSQL 的错误码，如 INTERNAL_ERROR / PGRST205）
-              // 也**不外露** —— 那是内部实现细节，对用户没有意义，
-              // 只会让人以为接口坏了。完整 code + message 都留在 err.detail 里供查日志。
-              msg = "数据库服务暂时异常（HTTP " + res.statusCode + "），请稍后再试";
-            } else {
-              // 4xx 等其它情况：网关原文通常是可安全外露的（如"参数不合法"）
-              msg = "数据库请求失败（HTTP " + res.statusCode + (gwCode ? " " + gwCode : "") + "）" + (gwMsg ? "：" + gwMsg : "");
-            }
+                msg = "数据库拒绝访问：API Key 缺失、无效或权限不足";
+              } else if (res.statusCode === 404) {
+                msg = "数据库访问路径不存在（表名或路径可能不对）";
+              } else if (res.statusCode === 409) {
+                msg = "数据库拒绝了这次写入：可能违反了唯一约束";
+              } else if (res.statusCode >= 500) {
+                msg = "数据库服务暂时异常，请稍后再试";
+              } else {
+                msg = "数据库请求未成功，请稍后再试";
+              }
             const err = new Error(msg);
             err.status = res.statusCode;
             err.detail = data;
-            // ⚠️ Day 23 调整边界：这里的消息已全部是「中文 + 不含内部术语」，
-            //   所以仍可安全外露（用户看到的是"数据库拒绝访问…请检查 API Key"这类话，
-            //   而不是 MISSING_CREDENTIALS / PGRST205 这种内部码）。
-            //   前提：上面各分支都不能拼 gwCode / gwMsg —— 已逐一核对过。
-            err.expose = true;
+            // ⚠️ Day 23 决定：**一律 expose=false**。
+            //   即使消息已是中文，它也属于「服务端故障」而不是「用户能自己解决的问题」，
+            //   该由入口层按 kind 统一给出「数据库暂时连不上 / 超时 / 服务异常」这类话。
+            //   这里保持消息完整只进日志，便于排查时对照。
+            err.expose = false;
             // Day 23：给内部错误打上分类标记。上层据此给前端不同的中文说明，
             // 但**绝不把 kind 本身返回给前端**——它是内部排查用的。
             err.kind =

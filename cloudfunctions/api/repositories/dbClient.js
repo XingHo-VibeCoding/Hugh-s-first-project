@@ -117,19 +117,33 @@ function request(method, pathAndQuery, bodyObj) {
       }
     );
     req.on("error", function (err) {
+      // ⚠️ Day 23 自查（同伴交叉验证）抓到的真bug：
+      //   超时走的是 `req.destroy(e3)`，而 destroy 会**触发 error 事件**，
+      //   且事件参数就是 e3 本身。下面若无条件把它包装成 e2，
+      //   「超时」就会被误报成「连不上」—— kind 被覆盖成 DB_UNREACHABLE。
+      //   （Day 23 中途试过用 `rejectedByTimeout` 标记位修，
+      //     结果 error 处理器直接 return，Promise 永不 settle、整个请求卡死。
+      //     正确做法是在这里**认出 e3**，而不是阻止处理器运行。）
+      if (err && err.isDbTimeout) {
+        // 就是超时那个，别覆盖它的 kind
+        reject(err);
+        return;
+      }
       const e2 = new Error("连接数据库失败：" + (err && err.message ? err.message : "网络错误"));
       // ⚠️ Day 23 修正：err.message 可能是 "socket hang up" / "ECONNRESET"
       // 这类**英文系统术语**，不能直接返回给用户（实测发现的真问题）。
       // expose=false → 原文只进服务端日志，前端拿到入口层按 kind 翻的标准中文。
       e2.expose = false;
       e2.systemMessage = err && err.message ? String(err.message) : ""; // 供日志对照
-      e2.kind = "DB_UNREACHABLE"; // Day 23：网络层失败 = 连不上
+      e2.kind = "DB_UNREACHABLE"; // 网络层失败 = 连不上
       reject(e2);
     });
     req.setTimeout(8000, function () {
       const e3 = new Error("数据库请求超时（8 秒）");
       e3.expose = false; // 具体超时秒数是内部参数，前端只需知道「超时、稍后再试」
       e3.kind = "DB_TIMEOUT"; // Day 23：与「连不上」区分开，排查时能一眼看出是哪种
+      // 这个标记让上面 error 处理器认出「这就是超时那个」，别把它误包装成网络故障
+      e3.isDbTimeout = true;
       req.destroy(e3);
     });
     // POST 的请求体必须显式写出去——只 set header 不 write，服务端收到的会是空 body

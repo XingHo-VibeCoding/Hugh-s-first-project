@@ -465,7 +465,15 @@ async function dispatch(req) {
         if (courseService.isBusinessError(result)) {
           return fail(result.message, result.httpStatus, result.code, origin);
         }
-        console.log("[api] 新增课程成功", result.created.id, result.name, "板块=" + (result.categoryId || "未归类"));
+        // ⚠️ Day 23 自查修正：原来这里打了 result.name（= 用户输入的课程名）。
+        //   日志属于「谁都能看」的地方，不该出现业务数据——
+        //   尤其课程名可能含姓名、学号之类的东西。改成只记 id 和板块。
+        console.log(
+          "[api] 新增课程成功",
+          result.created.id,
+          "学分=" + result.created.credits,
+          "板块=" + (result.categoryId || "未归类")
+        );
         return ok(result.created, 201, origin);
       } catch (err) {
         return internalError(err, "保存课程失败，稍后再试", origin);
@@ -554,8 +562,17 @@ exports.main = async function (event, context) {
     );
 
     return await dispatch(req);
-  } catch (err) {
-    // 这里拿不到 req，用环境变量里的默认来源（此时几乎不会走到）
-    return fail((err && err.message) || "服务出了点问题，稍后再试", 500, err && err.code);
-  }
-};
+} catch (err) {
+      // ⚠️ Day 23 自查抓到的问题：这里原来写的是
+      //    `fail(err.message || "服务出了点问题，稍后再试", …)`
+      //    —— 意思是**任何**未预期异常的英文原文都会直接回给用户。
+      //    实测注入 `throw new Error("boom: unexpected internal failure")`，
+      //    接口原样返回了这句话，等于把内部细节泄露出去。
+      //
+      //    改成：内部异常一律只说通用中文，原文只进日志。
+      //    （业务层的业务错误由 internalError 分级处理，不走这里）
+      console.error("[api] 顶层兜底捕获未预期异常：", err && err.message);
+      if (err && err.stack) console.error("[api] 调用栈：", err.stack.split("\n").slice(0, 4).join(" | "));
+      return fail("服务出了点问题，稍后再试", 500, (err && err.code) || "INTERNAL");
+    }
+  };

@@ -28,19 +28,21 @@ const BASE = process.env.CLOUDBASE_RDB_BASE || "https://" + ENV_ID + ".api.tclou
  */
 function request(method, pathAndQuery, bodyObj) {
   return new Promise(function (resolve, reject) {
-    // 兼容两种来源：手动配的 CLOUDBASE_API_KEY，以及控制台「API Key 设置」开关
-    // 自动注入的 CLOUDBASE_APIKEY（无下划线，后端专用）——两者任一存在即可
+    // 兼容两种来源：手动配的 CLOUDBASE_API_KEY，以及平台注入的
+    // CLOUDBASE_APIKEY（无下划线，后端专用）——两者任一存在即可。
+    // 配置方式见仓库根目录 .env.example。
     const apiKey = process.env.CLOUDBASE_API_KEY || process.env.CLOUDBASE_APIKEY;
     if (!apiKey) {
       const missing = new Error(
-        "云函数缺少 API Key：请开启函数配置里的「API Key 设置」开关（选后端专用），或手动添加环境变量 CLOUDBASE_API_KEY"
+        "云函数缺少 API Key：请在云函数的「环境变量」里配置 CLOUDBASE_APIKEY 或 CLOUDBASE_API_KEY" +
+        "（值取自控制台 → 环境管理 → API Key 配置 → 服务端 API Key）"
       );
       missing.code = "INTERNAL";
-        // ⚠️ Day 23 修正：这是**部署配置问题**，用户改不了什么。
-        //   原文（「请开启 API Key 设置开关…」）是给部署者看的指引，
-        //   原样返回只会让用户以为自己操作错了。expose=false → 只进日志。
-        missing.expose = false;
-        missing.kind = "DB_UNREACHABLE";
+      // ⚠️ Day 23 修正：这是**部署配置问题**，普通用户改不了什么。
+      //   原文是给部署者看的操作指引，原样返回只会让用户以为自己操作错了。
+      //   expose=false → 只进日志，对外说「数据库暂时连不上，请稍后再试」。
+      missing.expose = false;
+      missing.kind = "DB_UNREACHABLE";
       reject(missing);
       return;
     }

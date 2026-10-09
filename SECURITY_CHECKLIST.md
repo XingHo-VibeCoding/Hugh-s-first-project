@@ -106,9 +106,43 @@ grep -nE "^[A-Z_]+=.+" .env.example | grep -v "=$"   # 应无输出
 
 | 类别 | 怎么触发 | 期望 |
 |---|---|---|
-| 用户输入错 | 提交 `{"name":"","credits":2.3,"categoryId":"c1","status":"done"}` | 400 + 点出具体问题 |
-| 网络/接口错 | 临时改错表名 → 部署 → 请求 | 503 + 「数据库暂时…」类中文 |
-| 服务端错 | 临时写一个会抛异常的分支 | 500 + 一句通用话 |
+| 用户输入错 | 直接打公网：`curl -X POST …/api/courses -d '{"name":"","credits":2.3,"categoryId":"c1","status":"done"}'` | 400 + 点出具体问题 |
+| 网络/接口错 | **本地注入故障**（推荐，见下）或临时改错表名后部署 | 503 + 「数据库暂时…」类中文 |
+| 服务端错 | 本地让假网关返回 500 | 503 + 「数据库服务暂时异常」 |
+
+#### 网络/接口错怎么验（Day 23 实操修正）
+
+⚠️ **不要去控制台找「API Key 设置」开关——本环境控制台里没有这个开关。**
+
+`环境管理 → API Key 配置` 那一页只有**客户端 Publishable Key** 和**服务端 API Key**
+的创建与删除，没有「把这个 Key 注入到某个云函数」的选项。Day 23 专门找过，确认不存在。
+
+**改用本地注入故障**，更安全也覆盖得更全：用一个假网关代替真实数据库，
+让它按需返回 401 / 500 / 404，然后调`index.js` 看对外文案。
+不碰线上、不花钱、想验几次验几次。
+
+原理（实际脚本见 `.workbuddy/tmp/local-test-day23-errors.js`）：
+
+```js
+// 假网关：任何请求都回 401 + 网关内部错误码
+res.writeHead(401); res.end('{"code":"MISSING_CREDENTIALS","message":"Credentials missing"}');
+// 然后调入口
+index.main({ httpMethod:"GET", path:"/api/courses", queryStringParameters:{} })
+// 实际拿到：
+//   HTTP 503  {"ok":false,"error":"数据库暂时连不上，请稍后再试"}
+```
+
+**Day 23 本地实测结果**（四种后端故障）：
+
+| 注入的故障 | 网关原始返回 | 接口对外返回 |
+|---|---|---|
+| 环境变量里没有 Key | —（请求根本没发出去） | `503 数据库暂时连不上，请稍后再试` |
+| Key 无效 / 权限不足 | `401 {"code":"MISSING_CREDENTIALS"}` | `503 数据库暂时连不上，请稍后再试` |
+| 数据库内部报错 | `500 {"code":"INTERNAL_ERROR","message":"db exploded"}` | `503 数据库服务暂时异常，请稍后再试` |
+| 表名写错 | `404 {"code":"PGRST205","message":"Could not find the table"}` | `503 数据库访问异常，请稍后再试` |
+
+四种情况里 `MISSING_CREDENTIALS` / `INTERNAL_ERROR` / `db exploded` / `PGRST205`
+**一个都没漏到前端** ✅ 这就是第 ⑥ 项要的证据。
 
 **实测结果**：见下方"实测三类错误对照表"。
 

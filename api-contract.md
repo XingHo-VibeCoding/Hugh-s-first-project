@@ -22,7 +22,7 @@
 | 云端数据检查台 | `https://my-first-project-d2epfvu0373796b-1499184401.tcloudbaseapp.com/cloud.html` | Day 20 上线。三接口健康状态 + 板块/课程真实数据 + 写入测试入口（防重复、缺字段校验），公网实测三个接口全 200 |
 | 云数据库 | CloudBase **PostgreSQL**（Day 16 开通） | 表 `categories` / `courses` 已建；脚本 `db/schema.sql`、`db/seed.sql` 已入库 |
 | 云函数类型 | **普通云函数（事件函数）** | ⚠️ 选「HTTP 云函数」会导致网关 403，勿选 |
-| 后端接口部署形态 | **一路由一函数 + `API_ROUTE` 环境变量自报身份** | 本环境 HTTP 网关不向事件函数转发请求路径（event.path 恒为 `/`），单函数靠路径分发不可行；函数名 = 路由名：`api`(health) / `categories` / `courses`；API Key 走函数配置「API Key 设置」开关注入 `CLOUDBASE_APIKEY`（后端专用） |
+| 后端接口部署形态 | **一路由一函数 + `API_ROUTE` 环境变量自报身份** | 本环境 HTTP 网关不向事件函数转发请求路径（event.path 恒为 `/`），单函数靠路径分发不可行；函数名 = 路由名：`api`(health) / `categories` / `courses`；API Key 通过环境变量注入 `CLOUDBASE_APIKEY` 或 `CLOUDBASE_API_KEY`（后端专用），代码两个名字都读、任一存在即可；配置方式见 `.env.example` |
 | 后端代码分层 | **入口 / 业务 / 数据访问 三层**（Day 19 重构） | 入口 `index.js` → 业务 `services/courseService.js` → 数据访问 `repositories/*.js`（+ `dbClient.js` 连接工具）。⚠️ 部署 zip **必须保留 `repositories/`、`services/` 子目录**，压平会报 `Cannot find module`。分层说明见 `TECH_DESIGN.md` 第十五节 |
 | CORS 跨域 | **已配置（Day 20）** | 在 `index.js` 的 `json()` 里加 `Access-Control-Allow-Origin / -Methods / -Headers / -Max-Age`。白名单由环境变量 `CORS_ALLOWED_ORIGIN` 控制（留空则回退静态托管默认域名），**禁止 `*` 通配符**。实测：白名单来源拿到头，`https://evil.example.com` 匹配 0 次。⚠️ **控制台那个「跨域配置」入口对本环境无效**——它是 HTTP 云函数专用的，本项目是普通云函数 + HTTP 网关，实测 `OPTIONS` 预检被网关直接挡掉（405），请求根本不到云函数 |
 

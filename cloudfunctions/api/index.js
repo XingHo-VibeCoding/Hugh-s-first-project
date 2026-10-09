@@ -21,6 +21,8 @@
 const courseService = require("./services/courseService");
 // Day 22：修改与删除的业务规则放在独立服务文件里，保持每个文件职责单一
 const courseEdit = require("./services/courseEditService");
+// Day 23：写接口限流（护栏，防止接口被灌垃圾数据）
+const rateLimiter = require("./services/rateLimiter");
 
 const SERVICE = "credit-planner";
 
@@ -123,13 +125,43 @@ function fail(message, statusCode, code, requestOrigin) {
  * 且不含密钥/堆栈，标记了 expose 的直接放行——调试期报错必须能看出是密钥问题还是路径问题；
  * 其余未知异常对外只说人话，根因进日志。
  */
+/**
+ * Day 23：错误分级。
+ *
+ * 原来无论哪种内部故障，对外都是同一句「服务出了点问题，稍后再试」——
+ * 安全，但排查时看不出是哪一类。现在按 kind 给出不同的中文说明。
+ *
+ * ⚠️ **分级不等于泄露**：对外仍然只有中文话，
+ *    表名 / API Key / 堆栈 / 具体的 kind 值**一律不返回前端**，只进服务端日志。
+ */
+const DB_ERROR_TEXT = {
+  DB_UNREACHABLE: "数据库暂时连不上，请稍后再试",
+  DB_TIMEOUT: "数据库响应超时，请稍后再试",
+  DB_SERVER_ERROR: "数据库服务暂时异常，请稍后再试",
+};
+
 function internalError(err, friendlyMessage, requestOrigin) {
+  // kind 只进日志——这是排查的唯一线索，必须留下
   console.error(
     "[api] 原始错误",
+    err && err.kind ? "[" + err.kind + "]" : "",
     err && err.message,
     err && err.detail ? JSON.stringify(err.detail).slice(0, 300) : ""
   );
-  return fail(err && err.expose ? err.message : friendlyMessage, 500, err && err.code, requestOrigin);
+
+  // 情况一：数据层主动抛出、且已标记 expose（如"API Key 无效"这类可安全外露的）
+  //         → 直接用它自己的中文消息，那里面有排查线索
+  if (err && err.expose) {
+    return fail(err.message, 500, err.kind || err.code, requestOrigin);
+  }
+
+  // 情况二：网络类故障（连不上 / 超时 / 服务端 5xx）→ 按 kind 给更具体的中文说明
+  if (err && err.kind && DB_ERROR_TEXT[err.kind]) {
+    return fail(DB_ERROR_TEXT[err.kind], 503, err.kind, requestOrigin);
+  }
+
+  // 情况三：未预期的其它错误 → 最保守的一句话
+  return fail(friendlyMessage, 500, (err && err.code) || "INTERNAL", requestOrigin);
 }
 
 /**
@@ -349,6 +381,16 @@ function routeFromPath(path) {
 
 async function dispatch(req) {
   const origin = req.origin;
+
+  // ---- 写接口限流（Day 23）----
+  // 位置很关键：必须在 OPTIONS 之后、任何业务处理之前。
+  // 这样超限的请求连数据库都不用碰——省配额，也避免被恶意请求拖垮。
+  if (rateLimiter.isRateLimited(req, req.method)) {
+    console.warn("[api] 限流触发", req.method, rateLimiter.clientIp(req));
+    return fail("操作太快了，请稍后再试", 429, "RATE_LIMITED", origin);
+  }
+  // 顺手清理过期计数，避免 IP 多了漏内存（概率性调用即可，不必每次都做）
+  if (Math.random() < 0.02) rateLimiter.sweep();
 
   // 跨域预检（OPTIONS）：浏览器在真正发请求前会先问一句"我能不能发"。
   // ⚠️ 本环境的网关不把 OPTIONS 转给云函数（实测直接 405），所以这段很可能不会被执行到。

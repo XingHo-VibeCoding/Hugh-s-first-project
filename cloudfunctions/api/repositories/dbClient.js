@@ -81,13 +81,31 @@ function request(method, pathAndQuery, bodyObj) {
               msg = "数据库接口不存在（HTTP 404" + (gwCode ? " " + gwCode : "") + "）：表名或路径可能不对";
             } else if (res.statusCode === 409) {
               msg = "数据库拒绝了这次写入（HTTP 409" + (gwCode ? " " + gwCode : "") + "）：多半是违反了唯一约束（同一板块下课程名重复）";
+            } else if (res.statusCode >= 500) {
+              // ⚠️ Day 23 修正：**不要把网关的 message 原文拼进对外消息**。
+              //   实测发现网关 500 会带 message（如 "db exploded"），
+              //   原样返回等于把数据库内部的英文报错泄露给用户。
+              //   → 对外只说 HTTP 状态码；gwMsg 仅写进 err.detail（服务端日志可见）。
+              // gwCode（网关/PostgreSQL 的错误码，如 INTERNAL_ERROR / PGRST205）
+              // 也**不外露** —— 那是内部实现细节，对用户没有意义，
+              // 只会让人以为接口坏了。完整 code + message 都留在 err.detail 里供查日志。
+              msg = "数据库服务暂时异常（HTTP " + res.statusCode + "），请稍后再试";
             } else {
+              // 4xx 等其它情况：网关原文通常是可安全外露的（如"参数不合法"）
               msg = "数据库请求失败（HTTP " + res.statusCode + (gwCode ? " " + gwCode : "") + "）" + (gwMsg ? "：" + gwMsg : "");
             }
             const err = new Error(msg);
             err.status = res.statusCode;
             err.detail = data;
             err.expose = true; // 中文 + 关键线索，可直接返回给调用方
+            // Day 23：给内部错误打上分类标记。上层据此给前端不同的中文说明，
+            // 但**绝不把 kind 本身返回给前端**——它是内部排查用的。
+            err.kind =
+              res.statusCode === 401 || res.statusCode === 403 ? "DB_UNREACHABLE"
+              : res.statusCode === 404 ? "DB_NOT_FOUND"
+              : res.statusCode === 409 ? "DB_CONFLICT"
+              : res.statusCode >= 500 ? "DB_SERVER_ERROR"
+              : "DB_CLIENT_ERROR";
             reject(err);
           }
         });
@@ -95,12 +113,18 @@ function request(method, pathAndQuery, bodyObj) {
     );
     req.on("error", function (err) {
       const e2 = new Error("连接数据库失败：" + (err && err.message ? err.message : "网络错误"));
-      e2.expose = true;
+      // ⚠️ Day 23 修正：err.message 可能是 "socket hang up" / "ECONNRESET"
+      // 这类**英文系统术语**，不能直接返回给用户（实测发现的真问题）。
+      // expose=false → 原文只进服务端日志，前端拿到入口层按 kind 翻的标准中文。
+      e2.expose = false;
+      e2.systemMessage = err && err.message ? String(err.message) : ""; // 供日志对照
+      e2.kind = "DB_UNREACHABLE"; // Day 23：网络层失败 = 连不上
       reject(e2);
     });
     req.setTimeout(8000, function () {
       const e3 = new Error("数据库请求超时（8 秒）");
-      e3.expose = true;
+      e3.expose = false; // 具体超时秒数是内部参数，前端只需知道「超时、稍后再试」
+      e3.kind = "DB_TIMEOUT"; // Day 23：与「连不上」区分开，排查时能一眼看出是哪种
       req.destroy(e3);
     });
     // POST 的请求体必须显式写出去——只 set header 不 write，服务端收到的会是空 body

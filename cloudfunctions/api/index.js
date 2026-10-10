@@ -480,28 +480,48 @@ async function dispatch(req) {
       }
     }
     // Day 22：PATCH（改一条）与 DELETE（软删除 + 5 秒内可撤销）
-    if (req.method === "PATCH") {
-      const body = parseJsonBody(req);
+    //
+    // ⚠️ Day 24 修掉的真 bug：id 之前**只能**走请求体，而请求体能不能被网关收到
+    //   取决于客户端有没有发 `Content-Length`：
+    //     curl -d '...'            → 发 Content-Length → 收得到
+    //     Node https.request + write → 不发Content-Length → 网关按「无body」→ 收不到
+    //   结果同样一条DELETE，curl 成功、Node 报 400「请求体不能为空」，
+    //   而且**报错完全指不到真因**（看起来像代码 bug，其实是传输问题）。
+    //
+    //   修法：**同时接受 ?id= 查询串**。查询串不依赖任何请求头，一定能到云函数。
+    //   请求体方式保留，不破坏已有调用。
+    if (req.method === "PATCH" || req.method === "DELETE") {
+      const queryId = firstValue(req.query.id);
+      let body = parseJsonBody(req);
       if (body === undefined) return fail("请求体不是合法的 JSON", 400, "VALIDATION_ERROR", origin);
-      if (body === null) return fail("请求体不能为空，必须提交 id 指明要改哪一条", 400, "VALIDATION_ERROR", origin);
-      try {
-        const result = await courseEdit.updateCourse(body, courseService.validateCourse);
-        if (courseService.isBusinessError(result)) {
-          return fail(result.message, result.httpStatus, result.code, origin);
-        }
-        console.log("[api] 修改课程成功", result.updated.id, "改动字段=" + result.fields.join(","));
-        return ok(result.updated, 200, origin);
-      } catch (err) {
-        return internalError(err, "修改课程失败，稍后再试", origin);
+      // 无论有没有请求体，都以「对象」形式往下传；没有就给个空对象
+      if (body === null) body = {};
+
+      // 合并 id：请求体优先（更具体），其次查询串
+      const id = (typeof body.id === "string" && body.id.trim()) || queryId || "";
+      if (!id) {
+        return fail(
+          "必须指明要" + (req.method === "PATCH" ? "改" : "删") + "哪一条：加上 ?id=xxx 或在请求体里写 id",
+          400, "VALIDATION_ERROR", origin
+        );
       }
-    }
-    if (req.method === "DELETE") {
-      const body = parseJsonBody(req);
-      // DELETE 允许没有 body（空 body 当成"没说要删哪条"→ 400 并说清楚）
-      if (body === undefined) return fail("请求体不是合法的 JSON", 400, "VALIDATION_ERROR", origin);
-      if (body === null) return fail("请求体不能为空，必须提交 id 指明要删哪一条", 400, "VALIDATION_ERROR", origin);
+      const payload = Object.assign({}, body, { id: id });
+
+      if (req.method === "PATCH") {
+        try {
+          const result = await courseEdit.updateCourse(payload, courseService.validateCourse);
+          if (courseService.isBusinessError(result)) {
+            return fail(result.message, result.httpStatus, result.code, origin);
+          }
+          console.log("[api] 修改课程成功", result.updated.id, "改动字段=" + result.fields.join(","));
+          return ok(result.updated, 200, origin);
+        } catch (err) {
+          return internalError(err, "修改课程失败，稍后再试", origin);
+        }
+      }
+
       try {
-        const result = await courseEdit.deleteCourse(body);
+        const result = await courseEdit.deleteCourse(payload);
         if (courseService.isBusinessError(result)) {
           return fail(result.message, result.httpStatus, result.code, origin);
         }

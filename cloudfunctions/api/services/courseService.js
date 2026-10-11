@@ -15,6 +15,18 @@ const courseRepo = require("../repositories/coursesRepository");
 // 超过上限一律 400，不做"悄悄截断"——截断会让前端以为数据只有这么多，比报错更难查。
 const MAX_LIMIT = 500;
 
+// 学分上限：**必须和数据库列类型对齐**，否则会漏掉错误或误拒。
+//
+// 【B-004 修完后的取值】数据库 courses.credits 是 numeric(3,2) → 最大 9.99。
+// 为什么不是原来的 999.9：numeric(3,1) 是「3 位总数含 1 位小数」→ 最大 999.9；
+// 改成 numeric(3,2) 后小数位占了 2 位，整数位只剩 1 位 → 最大 9.99。
+// 两边不一致的后果是自己都没发现的 bug：
+// 上限写大了 → 12 学分能过我们的校验，到数据库才炸（回到 B-001 那个坑）；
+// 上限写小了 → 9.99 这个合法值被误拒。
+//
+// 实际课程学分不会超过 20，9.99 的上限绰绰有余。
+const MAX_CREDITS = 9.99;
+
 /** 业务错误的统一形状：带 httpStatus 和 code，便于入口层转成响应 */
 function businessError(message, httpStatus, code) {
   return { __error: true, message: message, httpStatus: httpStatus, code: code };
@@ -60,6 +72,76 @@ function listCategories() {
   return categoryRepo.listCategories();
 }
 
+// ---------------------------------------------------------------- 学分校验
+
+/**
+ * 学分校验。**POST 与 PATCH 共用这一个函数**——
+ * 之前两处各写一遍，改的时候很容易漏一处（B-002 就是这么漏的）。
+ *
+ * 三个问题在这里一起解决：
+ * B-001 超大值：数据库是 numeric(3,1)，最多 999.9。传 99999 以前能过我们的校验，
+ *   到数据库才炸，被当成"服务端故障"返回 503「稍后再试」——
+ *   而重试一万次也一样失败，还会误导用户在那儿等。
+ *   现在从源头拦住，返回 400 并直接告诉用户上限是多少。
+ * B-002 类型：以前 `Number("3") === 3`，字符串悄悄变成数字通过校验。
+ *   `"3abc"` 会被后面的 isFinite 拦住，但 `"3"` 是**静默通过**，
+ *   让人以为校验没生效。现在 typeof 不是 number 就直接拒。
+ * 粒度：0.5 → 0.25，与前端 app.js 的 isValidCreditStep() 和数据库 CHECK 约束对齐。
+ *   （数据库 CHECK 约束还是 mod(credits, 0.5)，这是另一个待办，见 KNOWN_BUGS.md）
+ */
+function validateCredits(raw) {
+  if (raw === undefined || raw === null || raw === "") {
+    return { ok: false, error: "缺少必填字段 credits（学分）" };
+  }
+
+  // B-002：先卡类型。JSON 里传 "3" 是字符串，说明调用方没按契约来，
+  // 静默转成数字会掩盖调用方的问题（比如前端把 input.value 直接传了上来）。
+  //
+  // ⚠️ 文案要说"必须是数字"而不是"不能是字符串"——
+  // 实测布尔值也会走到这里，说"不能是字符串"会让人以为是 bug。
+  if (typeof raw !== "number") {
+    return {
+      ok: false,
+      error:
+        "学分必须是数字，不能是" +
+        (typeof raw === "string" ? "字符串" : typeof raw) +
+        "（现在收到的是「" +
+        String(raw) +
+        "」）"
+    };
+  }
+  if (!isFinite(raw)) {
+    return { ok: false, error: "学分必须是有限数字，不能是 Infinity 或 NaN" };
+  }
+  if (raw <= 0) {
+    return { ok: false, error: "学分必须大于 0（现在收到的是「" + raw + "」）" };
+  }
+
+  // B-001：从源头拦住超范围的值，别让它走到数据库变成"服务端故障"
+  if (raw > MAX_CREDITS) {
+    return {
+      ok: false,
+      error: "学分不能超过 " + MAX_CREDITS + "（现在收到的是「" + raw + "」，请检查是不是把课程代码或学号填进去了）"
+    };
+  }
+
+  // 粒度：0.25 的整数倍
+  //
+  // ⚠️ 必须按"百分位"判断，不能写 Math.round(raw * 4) === raw * 4。
+  // 浮点误差会让 999.9（numeric(3,1) 的合法上限）算成 999.9*4=3999.6，
+  // 跟 4000 不等，于是**上限值本身被拒**——这是本地单测实测出来的。
+  // 转成两位小数的字符串再判断，绕开浮点误差。
+  const scaled = Math.round(raw * 100);
+  if (scaled % 25 !== 0) {
+    return {
+      ok: false,
+      error: "学分必须是 0.25 的倍数，例如 0.25、1.5、3（现在收到的是「" + raw + "」）"
+    };
+  }
+
+  return { ok: true, value: scaled / 100 };
+}
+
 // ---------------------------------------------------------------- 写入
 
 /**
@@ -75,17 +157,10 @@ function validateCourse(body) {
     return { ok: false, error: "课程名不能超过 30 个字（现在 " + name.length + " 个字）" };
   }
 
-  // 学分：必填、>0、必须是 0.5 的倍数
-  if (body.credits === undefined || body.credits === null || body.credits === "") {
-    return { ok: false, error: "缺少必填字段 credits（学分）" };
-  }
-  const credits = Number(body.credits);
-  if (!isFinite(credits) || credits <= 0) {
-    return { ok: false, error: "学分必须是大于 0 的数字（现在收到的是「" + body.credits + "」）" };
-  }
-  if (Math.round(credits * 2) !== credits * 2) {
-    return { ok: false, error: "学分必须是 0.5 的倍数，例如 2、2.5、3（现在收到的是「" + body.credits + "」）" };
-  }
+  // 学分：必填、>0、上限内、0.25 的倍数、必须是数字
+  const creditCheck = validateCredits(body.credits);
+  if (!creditCheck.ok) return creditCheck;
+  const credits = creditCheck.value;
 
   // 板块：键必须存在；值可以是 null（未归类）
   if (!("categoryId" in body)) {
@@ -173,9 +248,11 @@ async function createCourse(body) {
 
 module.exports = {
   MAX_LIMIT: MAX_LIMIT,
+  MAX_CREDITS: MAX_CREDITS,
   listCategories: listCategories,
   listCourses: listCourses,
   validateCourse: validateCourse,
+  validateCredits: validateCredits,
   createCourse: createCourse,
   isBusinessError: function (r) { return !!(r && r.__error === true); },
 };

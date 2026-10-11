@@ -1,3 +1,25 @@
+
+// ============================================================================
+// 学分常量：必须放在所有使用它的函数之前
+// ============================================================================
+// 学分上限：与云函数 courseService 的 MAX_CREDITS 保持一致。
+// 数据库 courses.credits 是 numeric(3,2)，最大 9.99（B-004 迁移后）。
+// 【为什么必须三处一致】前端、云函数、数据库各自的上限不同，
+// 就会出现「前端过了、云函数过了、数据库拒了」这种用户完全没做错的报错。
+//
+// ⚠️ 这里的 const 必须定义在下面的 validateCategory / validateCourse **之前**。
+// 修 B-004 时踩过一个坑：**`node --check` 查不出 const 的定义顺序问题**，
+// 但运行时会报 ReferenceError。函数声明会提升，const 不会——
+// 常量写在后面的话语法检查能过，页面一加载就崩。
+// 这个坑是靠真跑一次浏览器发现的，不是靠语法检查。
+// 教训：加新常量时，用真实浏览器跑一次，别只靠 node --check。
+const MAX_CREDITS = 9.99;
+
+// 超上限的文案（与数据库 numeric(3,2) 的上限 9.99 一致，见 MAX_CREDITS）
+const CREDIT_OVER_HINT = "学分不能超过 9.99（请检查是不是把课程代码或学号填进去了）";
+const REQUIRED_CREDIT_OVER_HINT = "要求学分不能超过 9.99";
+
+
 // 学分规划助手 —— 页面交互与计算逻辑
 // Day 7：本机存储接入、板块管理（F1）、课程录入（F2）、缺口与 GPA（F3/F4）
 // Day 8：主视图重组为四个板块（学分 / 课程 / 绩点 / 决策）、四种页面状态、
@@ -52,6 +74,9 @@ function validateCategory(input) {
     }
     if (credits <= 0) {
       return { ok: false, error: "要求学分要大于 0；不确定就留空。" };
+    }
+    if (credits > MAX_CREDITS) {
+      return { ok: false, error: REQUIRED_CREDIT_OVER_HINT };
     }
     if (!isValidCreditStep(credits)) {
       return { ok: false, error: REQUIRED_CREDIT_STEP_HINT };
@@ -151,6 +176,9 @@ function validateCourse(input, data) {
   if (credits <= 0) {
     return { ok: false, error: "学分要大于 0。" };
   }
+  if (credits > MAX_CREDITS) {
+    return { ok: false, error: CREDIT_OVER_HINT };
+  }
   if (!isValidCreditStep(credits)) {
     return { ok: false, error: CREDIT_STEP_HINT };
   }
@@ -198,8 +226,25 @@ function validateCourse(input, data) {
 //
 // 四处校验（板块要求、课程学分、实时提示 ×2）统一走这里，
 // 免得改一处漏一处 —— 这是之前维护校验文案时踩过的坑。
+//
+// 【为什么不能用 Math.round(value * 4) === value * 4】（Day 26 修B-001 时发现）
+// IEEE 754 里 999.9 实际存的是 999.89999999999997726…，
+// 乘 4 得 3999.599999999999909，不等于 4000 —— 于是 **9.99 这个合法的学分值会被误拒**。
+// 同样地 1.005 会被误收（1.005*4 恰好等于 4.02，取整后 4 ≠ 4.02，
+// 但 1.005 这种"看起来是两位小数"的值本身就不该通过）。
+//
+// 可靠做法：先转成"百分位整数"再判断，全程整数运算，绕开浮点误差。
+// 之所以还要限制"最多两位小数"，是因为 0.1+0.2 = 0.30000000000000004 这种值
+// 取整后是 30，30 % 25 ≠ 0 会被拒——但如果只判断"是不是 25 的倍数"，
+// 某些浮点误差恰好能被整除，反而把明显错误的值放进来了。
 function isValidCreditStep(value) {
-  return Math.round(value * 4) === value * 4;
+  if (typeof value !== "number" || !isFinite(value)) return false;
+  // 最多两位小数：把数值转成字符串看小数位数
+  const text = String(value);
+  const dot = text.indexOf(".");
+  if (dot !== -1 && text.length - dot - 1 > 2) return false;
+  const cents = Math.round(value * 100);
+  return cents % 25 === 0;
 }
 
 const CREDIT_STEP_HINT = "学分需为 0.25 的整数倍（如 0.25 / 0.5 / 1.5 / 3）";
@@ -235,6 +280,8 @@ function liveErrorsCourse(input, data) {
     errors.credits = CREDIT_FILL_HINT;
   } else if (credits <= 0) {
     errors.credits = "学分要大于 0。";
+  } else if (credits > MAX_CREDITS) {
+    errors.credits = CREDIT_OVER_HINT;
   } else if (!isValidCreditStep(credits)) {
     errors.credits = CREDIT_STEP_HINT;
   }

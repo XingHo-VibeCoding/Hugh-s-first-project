@@ -40,7 +40,7 @@
 |---|---|---|---|---|
 | id | id | varchar(32) | PRIMARY KEY | 不可重复 |
 | name | name | varchar(20) | NOT NULL UNIQUE；去空格后非空 | 非空、≤20 字、**板块名全局唯一** |
-| requiredCredits | required_credits | numeric(3,1) | 可空；填了须 >0 且为 0.5 倍数 | 0.5 的整数倍；**允许为空** |
+| requiredCredits | required_credits | numeric(3,2) | 可空；填了须 >0 且为 0.25 倍数 | 0.25 的整数倍，上限 9.99；**允许为空** |
 | note | note | varchar(100) | 可空 | ≤100 字 |
 | —（不对外暴露） | created_at / updated_at | timestamptz | NOT NULL DEFAULT now() | 仅排序与排错用，接口不返回 |
 
@@ -50,7 +50,7 @@
 |---|---|---|---|---|
 | id | id | varchar(32) | PRIMARY KEY | 不可重复 |
 | name | name | varchar(30) | NOT NULL；去空格后非空 | 非空、≤30 字 |
-| credits | credits | numeric(3,1) | NOT NULL；>0 且为 0.5 倍数 | 0.5 的整数倍 |
+| credits | credits | numeric(3,2) | NOT NULL；>0 且为 0.25 倍数 | 0.25 的整数倍，上限 9.99；**必须是 JSON 数字，字符串会被 400 拒绝** |
 | categoryId | category_id | varchar(32) | 可空；外键 → `categories(id)` **ON DELETE SET NULL**；**UNIQUE(category_id, name)** | 指向已存在板块；NULL = 未归类；**同板块内课程名不重复，跨板块允许同名** |
 | status | status | varchar(10) | NOT NULL，CHECK `('done','planned')`，默认 `'planned'` | 二选一 |
 | score | score | smallint | 可空；CHECK 0–100 | **<60 视为不及格、不计入已修学分**；为空不计入 GPA |
@@ -60,6 +60,27 @@
 **两表关联**：`courses.category_id` → `categories.id`。删板块 `mode=move` 时，外键 `ON DELETE SET NULL` 自动把课置为"未归类"——数据库层面兜底，不依赖接口代码写对。
 
 **索引**（Day 16 建表时一并创建）：`idx_courses_category_id`（按板块筛）、`idx_courses_status`（按状态筛）、`idx_courses_active`（部分索引，只覆盖未删除行——列表接口最常用的查询路径）。
+
+### ⚠️ 学分规则必须三层一致（Day 26 · B-004 教训）
+
+学分这一条规则同时存在于**三个地方**，任何一处不一致都会出 bug：
+
+| 层 | 位置 | 现值 |
+|---|---|---|
+| 前端 | `app.js` 的 `isValidCreditStep()` + `MAX_CREDITS` | 0.25 的倍数，上限 9.99 |
+| 云函数 | `services/courseService.js` 的 `validateCredits()` | 0.25 的倍数，上限 9.99 |
+| 数据库 | `courses.credits` 列类型 + CHECK 约束 | `numeric(3,2)` + `mod(·, 0.25)=0` |
+
+**为什么必须写进契约**：Day 26 我把前端和云函数都放宽到 0.25，忘了改数据库。
+结果是 0.25 的课**能过前后端所有校验，却被数据库 CHECK 拒掉**——
+用户会看到一个自己完全没做错的报错。
+
+**为什么当时没发现**：导入功能的测试走的是浏览器本机存储（localStorage），
+**压根没碰云端那条路径**。这是「测试全绿但功能实际不可用」，
+比测试失败危险得多。
+
+> **规矩：改跨层的规则（比如学分粒度、成绩范围、字数上限）时，
+> 逐层确认，别只验证自己动过的那层。**
 
 ---
 

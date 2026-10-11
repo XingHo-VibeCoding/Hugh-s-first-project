@@ -96,6 +96,37 @@ pre{
 
 footer{margin-top:28px;padding-top:16px;border-top:1px solid var(--border);color:var(--text-hint);font-size:13px}
 footer a{color:var(--accent)}
+
+/* ---------------------------------------------------------------- 改 / 删（B-003）*/
+td.ops{white-space:nowrap}
+.op-btn{
+  border:1px solid var(--border);background:#fff;color:var(--text);
+  border-radius:6px;padding:3px 10px;font-size:12.5px;cursor:pointer;
+  font-family:inherit;
+}
+.op-btn:hover{background:var(--bg);border-color:var(--accent);color:var(--accent)}
+.op-del:hover{border-color:var(--danger-text);color:var(--danger-text);background:var(--danger-bg)}
+.op-ok{background:var(--accent);border-color:var(--accent);color:#fff}
+.op-ok:hover{background:var(--accent);color:#fff;opacity:.85}
+
+/* 行内编辑的输入框 */
+.cell-in{
+  width:100%;font:inherit;font-size:13px;padding:3px 6px;
+  border:1px solid var(--border);border-radius:5px;background:#fff;color:var(--text);
+}
+.cell-num{text-align:right}
+.cell-in:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:var(--accent)}
+select.cell-in{cursor:pointer}
+
+/* 删除确认条 / 撤销条 */
+.confirm-bar{
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  padding:10px 12px;border-radius:8px;
+  background:var(--warn-bg);color:var(--warn-text);
+  border:1px solid var(--border);font-size:13.5px;
+}
+.confirm-bar[hidden]{display:none}
+.cf-text{color:var(--text)}
 </style>
 </head>
 <body>
@@ -139,7 +170,7 @@ footer a{color:var(--accent)}
     </p>
     <div class="scroll">
       <table>
-        <thead><tr><th>ID</th><th>课程名</th><th class="num">学分</th><th>板块</th><th>状态</th><th class="num">成绩</th></tr></thead>
+        <thead><tr><th>ID</th><th>课程名</th><th class="num">学分</th><th>板块</th><th>状态</th><th class="num">成绩</th><th>操作</th></tr></thead>
         <tbody id="course-body"></tbody>
       </table>
     </div>
@@ -155,6 +186,16 @@ footer a{color:var(--accent)}
     </div>
     <div id="write-msg"></div>
     <pre id="write-out" hidden></pre>
+  </section>
+
+  <section class="panel">
+    <h2>修改 / 删除（PATCH / DELETE）</h2>
+    <p class="hint">
+      上方表格每行末尾有「改」「删」两个按钮。改是行内编辑；删会先出确认条，
+      删完 5 秒内还能撤销——这正是接口契约第 10 条的撤销窗口。
+    </p>
+    <!-- 删除确认条 / 撤销条共用这一个容器 -->
+    <div id="confirm-bar" class="confirm-bar" hidden></div>
   </section>
 
   <section class="panel">
@@ -350,6 +391,15 @@ function renderCategories() {
   });
 }
 
+// Day 26 追加（B-003）：每行加「改」「删」两个按钮。
+//
+// ⚠️ **改用行内编辑，不用弹窗**：检查台是用来演示接口的，
+// 弹窗会把"改一个学分"变成三次点击，而且看不到改前改后的对比。
+//
+// ⚠️ **删除必须二次确认**，而且不是 confirm()——
+// 弹的是浏览器原生对话框，样式旧、按钮文案是英文 OK/Cancel，
+// 跟整个页面不一致，还会阻塞渲染。这里自己做一个，
+// 明确写出「删哪一门」和「5 秒内可撤销」。
 function renderCourses() {
   var body = document.getElementById("course-body");
   body.innerHTML = "";
@@ -361,18 +411,185 @@ function renderCourses() {
 
   rows.forEach(function (c) {
     var tr = document.createElement("tr");
+    tr.setAttribute("data-id", c.id);
     var cat = categoryName(c.categoryId);
     var score = c.score === null ? "—" : c.score;
     tr.innerHTML =
       "<td>" + c.id + "</td>" +
-      "<td>" + c.name + "</td>" +
+      "<td>" + esc(c.name) + "</td>" +
       "<td class='num'>" + c.credits + "</td>" +
-      "<td>" + (cat ? cat : '<span class="pill none">未归类</span>') + "</td>" +
+      "<td>" + (cat ? esc(cat) : '<span class="pill none">未归类</span>') + "</td>" +
       "<td><span class='pill" + (c.status === "done" ? " done" : "") + "'>" +
         (c.status === "done" ? "已修" : "计划中") + "</span></td>" +
-      "<td class='num'>" + score + "</td>";
+      "<td class='num'>" + score + "</td>" +
+      "<td class='ops'>" +
+        "<button type='button' class='op-btn' data-op='edit' data-id='" + c.id + "'>改</button> " +
+        "<button type='button' class='op-btn op-del' data-op='del' data-id='" + c.id + "'>删</button>" +
+      "</td>";
     body.appendChild(tr);
   });
+}
+
+/** HTML 转义 —— 课程名是用户输入的，直接拼进 innerHTML 会被当成标签解析 */
+function esc(s) {
+  return String(s === null || s === undefined ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+// ------------------------------------------------------- 改 / 删（B-003）
+
+/** 正在编辑的行 id；同一时间只允许编辑一行，避免表格结构乱掉 */
+var editingId = null;
+/** 待确认删除的行 id */
+var pendingDeleteId = null;
+
+/** 进��行内编辑：把这一行换成输入框 */
+function startEdit(id) {
+  if (editingId && editingId !== id) cancelEdit();
+  var tr = findRow(id);
+  var c = findCourse(id);
+  if (!tr || !c) return;
+
+  editingId = id;
+  pendingDeleteId = null;
+  clearConfirmBar();
+
+  // 板块下拉：列出所有板块，外加「未归类」
+  var catOpts = ['<option value="">（未归类）</option>'];
+  state.categories.forEach(function (cat) {
+    var sel = cat.id === (c.categoryId || "") ? " selected" : "";
+    catOpts.push('<option value="' + esc(cat.id) + '"' + sel + ">" + esc(cat.name) + "</option>");
+  });
+
+  tr.innerHTML =
+    "<td>" + c.id + "</td>" +
+    "<td><input type='text' class='cell-in' id='ed-name' maxlength='30' value='" + esc(c.name) + "'></td>" +
+    "<td class='num'><input type='number' class='cell-in cell-num' id='ed-credits' step='0.25' min='0' value='" + c.credits + "'></td>" +
+    "<td><select class='cell-in' id='ed-category'>" + catOpts.join("") + "</select></td>" +
+    "<td><select class='cell-in' id='ed-status'>" +
+      '<option value="planned"' + (c.status === "planned" ? " selected" : "") + ">计划中</option>" +
+      '<option value="done"' + (c.status === "done" ? " selected" : "") + ">已修</option>" +
+    "</select></td>" +
+    "<td class='num'><input type='number' class='cell-in cell-num' id='ed-score' min='0' max='100' step='1' value='" +
+      (c.score === null ? "" : c.score) + "' placeholder='—'></td>" +
+    "<td class='ops'>" +
+      "<button type='button' class='op-btn op-ok' data-op='save' data-id='" + c.id + "'>保存</button> " +
+      "<button type='button' class='op-btn' data-op='cancel'>取消</button>" +
+    "</td>";
+
+  var first = tr.querySelector("#ed-name");
+  if (first) first.focus();
+}
+
+/** 放弃编辑：重新渲染整张表（最省事，也不会留下半截状态） */
+function cancelEdit() {
+  editingId = null;
+  renderCourses();
+}
+
+/** 保存修改 → PATCH */
+function saveEdit(id) {
+  var tr = findRow(id);
+  if (!tr) return;
+
+  var body = {
+    id: id,
+    name: val("#ed-name"),
+    credits: num("#ed-credits"),
+    categoryId: val("#ed-category") || null,
+    status: val("#ed-status"),
+  };
+  var scoreRaw = val("#ed-score");
+  // 成绩留空 = 不填成绩。注意 planned 时不能带成绩（契约要求）
+  body.score = scoreRaw === "" ? null : Number(scoreRaw);
+  if (body.status === "planned") body.score = null;
+
+  api("/api/courses", { method: "PATCH", body: body }).then(function (r) {
+    editingId = null;
+    if (r.ok) {
+      // ⚠️ 不显示"已改字段"清单 —— 契约里 PATCH 的响应只有更新后的课程对象，
+      // **没有 fields 数组**（云函数 index.js 第 517 行只 `ok(result.updated)`）。
+      // 硬显示 fields 就会永远是空的，不如不说。
+      showWrite(true, "✅ 修改成功：" + r.data.name + "（" + r.data.credits + " 学分 · " +
+        (r.data.status === "done" ? "已修" : "计划中") + "）", { ok: true, data: r.data });
+    } else {
+      showWrite(false, "❌ 修改失败：" + r.error, { ok: false, error: r.error });
+    }
+    return loadAll();
+  });
+}
+
+/** 请求删除：先出确认条，不直接删 */
+function askDelete(id) {
+  var c = findCourse(id);
+  if (!c) return;
+  editingId = null;
+  renderCourses();
+  pendingDeleteId = id;
+
+  var bar = document.getElementById("confirm-bar");
+  bar.hidden = false;
+  bar.innerHTML =
+    '<span class="cf-text">要删掉「<b>' + esc(c.name) + "</b>」吗？5 秒内可以撤销。</span> " +
+    '<button type="button" class="op-btn op-del" id="cf-yes">确认删除</button> ' +
+    '<button type="button" class="op-btn" id="cf-no">算了</button>';
+}
+
+function clearConfirmBar() {
+  var bar = document.getElementById("confirm-bar");
+  if (bar) { bar.hidden = true; bar.innerHTML = ""; }
+  pendingDeleteId = null;
+}
+
+/** 真的删 → DELETE（带 id 查询串，因为网关对无 body 的 DELETE 直接拦） */
+function doDelete(id) {
+  var c = findCourse(id);
+  var name = c ? c.name : id;
+
+  api("/api/courses?id=" + encodeURIComponent(id), {
+    method: "DELETE",
+    body: { id: id },          // 网关要求必须带 body（哪怕有查询串也带上）
+  }).then(function (r) {
+    clearConfirmBar();
+    if (r.ok) {
+      showWrite(true, "✅ 已删除：" + name + "（撤销截止 " + (r.data.restoreBefore || "") + "）",
+        { ok: true, data: r.data });
+      // ⚠️ 撤销按钮**故意不给**：契约第 10 条的 restore 至今没有接入入口层
+      // （api-contract.md 里标着「未实现」，Day 22 顺延）。
+      // 业务层的 restoreCourse() 写好了，但 index.js 里没有路由到它——
+      // 调它只会拿到 404 或者更糟的结果。
+      // 这里如实说明，而不是放一个点了必然失败的按钮。
+      // 详见 KNOWN_BUGS.md 的 L-002。
+      var bar = document.getElementById("confirm-bar");
+      bar.hidden = false;
+      bar.innerHTML =
+        '<span class="cf-text">已删掉「<b>' + esc(name) + "</b>」。</span>" +
+        '<span class="cf-text" style="color:var(--text-hint)">' +
+        "（撤销接口还没接到后端入口，所以这里没有撤销按钮）</span>";
+    } else {
+      showWrite(false, "❌ 删除失败：" + r.error, { ok: false, error: r.error });
+    }
+    return loadAll();
+  });
+}
+
+function findRow(id) {
+  return document.querySelector('#course-body tr[data-id="' + id + '"]');
+}
+function findCourse(id) {
+  for (var i = 0; i < state.courses.length; i++) {
+    if (state.courses[i].id === id) return state.courses[i];
+  }
+  return null;
+}
+function val(sel) {
+  var el = document.querySelector(sel);
+  return el ? el.value.trim() : "";
+}
+function num(sel) {
+  var raw = val(sel);
+  return raw === "" ? null : Number(raw);
 }
 
 // ---------------------------------------------------------------- 加载全部
@@ -475,6 +692,51 @@ document.querySelectorAll("[data-filter]").forEach(function (btn) {
 
 document.getElementById("btn-recheck").addEventListener("click", function () {
   loadAll();
+});
+
+// ------------------------------------------------ 改 / 删的事件委托（B-003）
+//
+// ⚠️ 为什么用**事件委托**而不是给每个按钮 addEventListener：
+// 表格每次 renderCourses() 都会重建全部 DOM，逐行绑定的话
+// 一刷新按钮就全失效了，得在每次渲染后重新绑定一遍——容易漏。
+// 委托到 tbody 上只绑一次，之后不管重绘多少次都有效。
+document.getElementById("course-body").addEventListener("click", function (e) {
+  var btn = e.target.closest("[data-op]");
+  if (!btn) return;
+  var op = btn.getAttribute("data-op");
+  var id = btn.getAttribute("data-id");
+
+  if (op === "edit") startEdit(id);
+  else if (op === "del") askDelete(id);
+  else if (op === "save") saveEdit(id);
+  else if (op === "cancel") cancelEdit();
+});
+
+// 确认条里的按钮是动态插入的，用委托
+document.getElementById("confirm-bar").addEventListener("click", function (e) {
+  if (e.target.id === "cf-yes") {
+    var id = pendingDeleteId;
+    clearConfirmBar();
+    if (id) doDelete(id);
+  } else if (e.target.id === "cf-no") {
+    clearConfirmBar();
+  }
+});
+
+// 编辑行里按回车 = 保存，按 Esc = 取消
+document.addEventListener("keydown", function (e) {
+  if (!editingId) return;
+  if (e.key === "Enter") {
+    // 只在输入框/下拉里触发，文本框回车不该提交整个页面
+    var tag = e.target.tagName;
+    if (tag === "INPUT" || tag === "SELECT") {
+      e.preventDefault();
+      saveEdit(editingId);
+    }
+  } else if (e.key === "Escape") {
+    e.preventDefault();
+    cancelEdit();
+  }
 });
 
 // ---------------------------------------------------------------- 启动

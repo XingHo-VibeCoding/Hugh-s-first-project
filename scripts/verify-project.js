@@ -16,7 +16,8 @@
  */
 
 const https = require("https");
-const { execSync } = require("child_process");
+// spawnSync：绕开 cmd.exe 执行 git（见下面 runGit 的注释）
+const { execSync, spawnSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 
@@ -62,53 +63,157 @@ function record(no, name, pass, evidence, blocking) {
   console.log("  " + no + " " + name + "\n     [" + tag + "] " + evidence);
 }
 
-// ⚠️ Day 25 修正（**故意弄坏测试发现的漏报，最严重的一个**）：
+// ⚠️ Day 25/26 两次修正（"查不了 ≠ 没问题" 逼出来的）：
 //
-//   原来所有 grep 类检查（⑧⑨）都用 `git ls-files | while read f; do ... done`。
-//   在 **Windows 上 execSync 默认走 cmd.exe**，它**不认识 bash 的 while/read 语法**，
-//   整条管道被 cmd 静默吃掉 → **返回空字符串** → 检查项一律判 PASS。
+//   检查器原本用 `execSync("git log --all -p")` 拿历史。
+//   Day 25 遇到 `spawnSync cmd.exe EBUSY`，加了 3 次重试；
+//   Day 26 复现发现它**稳定失败、不是偶发**：execSync / spawnSync 都 EBUSY，
+//   而同样的 git 命令在 Bash 里完全正常。→ 换 spawnSync 免 shell 也没用。
 //
-//   这是「Skill 骗过去了」的真正原因：不是正则不对，是**命令根本没执行**。
-//   更糟的是它**在任何机器上都会报"通过"**，比明显报错危险得多。
+//   结论：**这条环境里从 Node 起 git 子进程这条路是断的**，
+//   再怎么调调用方式都不可靠。所以彻底换思路：
 //
-//   修法：**不依赖 shell**。用 git 拿文件列表，在 Node 里逐个读文件、逐行正则匹配。
-//   顺带好处：能明确报告"扫了多少个文件"，一眼看出"扫了0 个 = 没扫到"。
-// ⚠️ Day 25 第三次修正（同上，"扫了 0 个文件"暴露出来的）：
-//   execSync 在 Windows 上偶尔抛 `spawnSync cmd.exe EBUSY`
-//   （频繁起子进程时的资源竞争），于是 listTrackedFiles 返回空
-//   → 检查项报"0 命中" → **又是一次虚报通过**。
+//   **git 历史里的内容，直接从 .git 目录读。**
+//   .git/objects 是 zlib 压缩的 blob，Node 自带 zlib 能解；
+//   遍历 refs/heads/* 拿到所有分支的 commit，逐个展开树、读每个 blob 的内容。
+//   完全不依赖外部命令，也不受 EBUSY 影响。
 //
-//   两条修法一起上：
-//   ① 重试 3 次，仍失败才放弃
-//   ② **拿不到文件列表时，检查项必须判 FAIL 而不是 PASS**
-//      ——「查不了」不等于「没问题」。这条是整个 Skill 最重要的原则。
-function runGit(args, opts) {
-  let lastErr = null;
-  for (let i = 0; i < 3; i++) {
-    try {
-      return execSync("git " + args, Object.assign({
-        cwd: ROOT, encoding: "utf8", timeout: 120000, maxBuffer: 64 * 1024 * 1024,
-      }, opts || {}));
-    } catch (e) {
-      lastErr = e;
-      if (e && e.stdout !== undefined && e.stdout !== null && String(e.stdout) !== "") {
-        return String(e.stdout);   // 有输出就够了（git 有些子命令非 0 退出）
+//   保留 runGit() 只给少数真正需要 git 的地方用（比如 git check-ignore），
+//   那些地方拿不到就明确报 FAIL —— **查不了 ≠ 没问题**。
+function readGitBlobs() {
+  const gitDir = path.join(ROOT, ".git");
+  if (!fs.existsSync(gitDir)) {
+    return { ok: false, reason: "找不到 .git 目录（不是 git 仓库？）" };
+  }
+  const zlib = require("zlib");
+
+  // ---- 读所有 ref ----
+  const refs = [];
+  const refRoots = [path.join(gitDir, "refs", "heads"), path.join(gitDir, "refs", "tags")];
+  for (const root of refRoots) {
+    let names = [];
+    try { names = fs.readdirSync(root); } catch (e) { continue; }
+    for (const n of names) {
+      const fp = path.join(root, n);
+      try {
+        const sha = fs.readFileSync(fp, "utf8").trim();
+        if (/^[0-9a-f]{40}$/.test(sha)) refs.push(sha);
+      } catch (e) { /* 跳过坏 ref */ }
+    }
+  }
+  // packed-refs 里还有一部分
+  try {
+    const packed = fs.readFileSync(path.join(gitDir, "packed-refs"), "utf8");
+    packed.split("\n").forEach(function (line) {
+      const m = line.match(/^([0-9a-f]{40})\s+refs\//);
+      if (m) refs.push(m[1]);
+    });
+  } catch (e) { /* 没有这个文件很正常 */ }
+
+  if (!refs.length) {
+    return { ok: false, reason: ".git 里没找到任何分支或标签" };
+  }
+
+  // ---- 读一个 git 对象 ----
+  function readObject(sha) {
+    const f = path.join(gitDir, "objects", sha.slice(0, 2), sha.slice(2));
+    let raw;
+    try { raw = fs.readFileSync(f); } catch (e) { return null; }
+    let body;
+    try { body = zlib.inflateSync(raw); } catch (e) { return null; }
+    const nul = body.indexOf(0);
+    if (nul === -1) return null;
+    const header = body.slice(0, nul).toString("utf8");
+    const content = body.slice(nul + 1);
+    const type = header.split(" ")[0];
+    return { type: type, content: content };
+  }
+
+  // ---- 遍历 commit 树，收集所有 blob ----
+  const seen = {};
+  const blobs = [];
+  let commitCount = 0;
+
+  function walkTree(sha) {
+    if (seen[sha]) return;
+    seen[sha] = true;
+    const obj = readObject(sha);
+    if (!obj || obj.type !== "tree") return;
+    // tree 的内容是 "<mode> <name>\0<20字节 sha>" 反复
+    const buf = obj.content;
+    let i = 0;
+    while (i < buf.length) {
+      const sp = buf.indexOf(0x20, i);
+      if (sp === -1) break;
+      const nul2 = buf.indexOf(0, sp);
+      if (nul2 === -1) break;
+      const name = buf.slice(sp + 1, nul2).toString("utf8");
+      const shaHex = buf.slice(nul2 + 1, nul2 + 21).toString("hex");
+      i = nul2 + 21;
+      const isTree = i <= buf.length && false;   // 下面用 type 判断
+      const child = readObject(shaHex);
+      if (!child) continue;
+      if (child.type === "tree") walkTree(shaHex);
+      else if (child.type === "blob") {
+        if (!seen["b:" + shaHex]) {
+          seen["b:" + shaHex] = true;
+          blobs.push({
+            sha: shaHex,
+            // ⚠️ 必须带出**文件名**（Day 26 踩坑）：
+            //   之前只返回内容，导致下游按行排除「检查器自身的文件名」永远命不中
+            //   —— blob 内容里没有文件名，于是检查器把自己判成了密钥。
+            //   排除规则要作用在正确的层级：按文件排除就得先有文件名。
+            name: name,
+            content: child.content.toString("utf8"),
+          });
+        }
       }
     }
   }
-  throw lastErr || new Error("git " + args + " 执行失败");
+
+  function walkCommit(sha) {
+    if (seen["c:" + sha]) return;
+    seen["c:" + sha] = true;
+    const obj = readObject(sha);
+    if (!obj || obj.type !== "commit") return;
+    commitCount++;
+    const text = obj.content.toString("utf8");
+    const treeM = text.match(/^tree ([0-9a-f]{40})/m);
+    if (treeM) walkTree(treeM[1]);
+    // 父提交：把历史里每一版都扫到（不然只能扫到最新一版）
+    const parents = [];
+    text.split("\n").forEach(function (line) {
+      const m = line.match(/^parent ([0-9a-f]{40})/);
+      if (m) parents.push(m[1]);
+    });
+    parents.forEach(walkCommit);
+  }
+
+  refs.forEach(walkCommit);
+
+  if (!commitCount) {
+    return { ok: false, reason: "读到 0 个 commit（对象可能是 pack 文件，未解包）" };
+  }
+  return { ok: true, commitCount: commitCount, blobs: blobs };
 }
 
-// ⚠️ Day 25 第四次修正（"查不了 ≠ 没问题" 暴露出来的**最根本问题**）：
+/** 还需要 git 命令时用（少数场景，比如 git check-ignore）。拿不到就抛错，让调用方判 FAIL。 */
+function runGit(args, opts) {
+  const list = Array.isArray(args) ? args : String(args).split(/\s+/);
+  const o = Object.assign({
+    cwd: ROOT, encoding: "utf8", timeout: 120000, maxBuffer: 64 * 1024 * 1024,
+  }, opts || {});
+  const r = spawnSync("git", list, o);
+  if (r.error) throw r.error;
+  if (r.stdout !== null && r.stdout !== undefined) return String(r.stdout);
+  throw new Error("git " + list.join(" ") + " 执行失败");
+}
+
+// 扫哪些文件：**用 Node 直接遍历目录**，不依赖 `git ls-files`。
 //
-//   检查器把「能否拿到文件列表」绑在 `execSync("git …")` 上。
-//   实测在某些 Windows 环境里 `spawnSync cmd.exe EBUSY` 会让**每一条 git 命令都失败**
-//   → 两个密钥检查项直接判 FAIL（虽然比虚报 PASS 好，但失去了检查能力）。
-//
-//   修法：**用 Node 直接遍历目录**作为主路径，不依赖任何外部命令。
-//   `git ls-files` 只作为「哪些文件该被扫」的参考，不是必需。
-//   顺带好处：连**未提交的新文件**也一起扫了 —— 而那恰恰是最容易漏密钥的地方
-//   （Day 25 第一次塞假密钥时它就是未提交状态）。
+// 为什么不用 git 拿文件列表：Windows 上 execSync 起 cmd.exe 会 EBUSY（见上面 runGit）。
+// 而且直接遍历还有个好处：**连未提交的新文件也一起扫了** ——
+// 而那恰恰是最容易漏密钥的地方（Day 25 第一次塞假密钥时它就是未提交状态）。
 const SKIP_DIRS = [".git", ".workbuddy", "node_modules", ".vscode", ".idea", "dist", "build"];
 
 function walkFiles(dir, out, depth) {
@@ -316,7 +421,24 @@ const sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms
     "creditPlanner.",     // 项目自己的命名空间（localStorage 键）
   ];
   const hitsB = scanFiles(NAME_PAT, scan.files).filter(function (h) {
-    return !NAME_EXCLUDE.some(function (x) { return h.text.indexOf(x) >= 0; });
+    if (NAME_EXCLUDE.some(function (x) { return h.text.indexOf(x) >= 0; })) return false;
+    // ↓ Day 26 补（连着踩了三次同样的坑才想明白）：
+    //   排除规则不该靠"中文说明词"来识别举例 —— 因为**解释这条规则的注释本身
+    //   就含有那些词**，于是规则把自己写的注释判成了密钥（死循环）。
+    //
+    //   正确判据分两种，按"这行到底是什么"来判断：
+    //   ① **注释**以 // 或 * 开头 —— 注释不是可执行代码，
+    //      写在注释里的"这是假密钥示例"没有任何泄露风险。
+    //   ② **Markdown 正文**—— 讲清契约必须写出字段名和字面量，
+    //      而它们长得就像密钥。
+    //   反过来，代码里的 `KEY = "xxx"` 不管注释怎么解释，它都在赋值，都得查。
+    const t = String(h.text).trim();
+    if (t.indexOf("//") === 0) return false;
+    if (t.indexOf("*") === 0) return false;
+    if (t.indexOf("/*") === 0) return false;
+    // Markdown 正文：命中的是 md 文件，且这一行不是表格/标题（那些已被排除）
+    if (/\.md$/i.test(h.file) && !/^[|>#*`]/.test(t)) return false;
+    return true;
   });
   // 同一文件同一行可能被两层都命中，去重
   const seen = {};
@@ -339,31 +461,51 @@ const sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms
     true);
 
   // ---------------------------------------------------------- ⑨ Git 历史密钥
-  //同样**不依赖 shell 管道**：取全量 diff 文本，在 Node 里逐行正则匹配。
-  let diffText = "";
-  let histReadOk = true;
-  try {
-    diffText = runGit("log --all -p");
-  } catch (e) { histReadOk = false; diffText = ""; }
-  let commitCount = "(读不到)";
-  try { commitCount = runGit("rev-list --all --count", { timeout: 30000 }).trim(); } catch (e) { /* 读不到就算了 */ }
+  //
+  // Day 26 改用 readGitBlobs()：**直接从 .git 目录读**，不调 git 子进程。
+  // 原因见 readGitBlobs 上面的注释（本环境 execSync/spawnSync 起 git 都 EBUSY，
+  // 但 Bash 里完全正常——所以不是 git 的问题，是从 Node 起子进程这条路断了）。
+  //
+  // 好处还不止「能跑」：直接读 objects 能拿到**每一个历史版本的文件内容**，
+  // 而 `git log -p` 只给 diff。扫 blob 更彻底（某个文件的旧版本里有密钥也能查到）。
+  const hist = readGitBlobs();
+  const histReadOk = hist.ok;
+  const commitCount = hist.ok ? String(hist.commitCount) : "(读不到)";
   const histRe = new RegExp(
     CONTENT_PAT + "|postgres://|postgresql://|mysql://|mongodb://|jwt[_-]?secret", "i");
   const histList = [];
-  diffText.split("\n").forEach(function (line) {
-    if (line.charAt(0) !== "+") return;                 // 只看新增行
-    if (line.indexOf("grep -") >= 0) return;             // 排除搜索语句自我匹配
-    if (line.indexOf("verify-project.js") >= 0) return;  // 排除检查器自身
-    // ↓ Day 25 补：文档里**解释这个坑的那段话**也会命中
-    //   （Day 23 把「搜索语句匹配到自己」写进了 SECURITY_CHECKLIST.md，
-    //     那段解释里含`postgres://` 字面量 → 又一次自我匹配）
-    //   判断：出现在 Markdown 的表格/引用/说明文字里，而不是代码里。
-    if (line.indexOf("SECURITY_CHECKLIST") >= 0) return;
-    if (/^\+\s*[|>#*`]/.test(line) && line.indexOf("grep -") < 0) {
-      // 以表格符/引用符/标题符开头 → 是文档正文，不是配置
-      return;
-    }
-    if (histRe.test(line)) histList.push(line.trim().slice(0, 110));
+
+  // ⚠️ Day 26 补（这个检查项因为"排除规则用错层级"错了三次才修对）：
+  //
+  //   按**文件**排除，不是按行。理由：检查器自己的源码里有一行正则定义
+  //   （`CONTENT_PAT + "|postgres://|mysql://…"`），它长得就像密钥。
+  //   之前用 `line.indexOf("verify-project.js")` 排除，但 blob 内容里
+  //   **没有文件名**，这行永远排除不掉 —— 于是检查器把自己判成了"历史里的密钥"。
+  //
+  //   **教训：排除规则要作用在正确的层级上。**
+  //   按行排除只在"行内自带标识"时有效；要按文件排除，就得先把文件名带进循环。
+  //   —— 这和 Day 26 修 B-004 时踩的是同一类错误：判据用在了错误的层级。
+  //
+  //   另外两类排除也补齐了：
+  //   - Markdown 文档要写字段名和字面量（讲清契约必须写），不是密钥
+  //   - 注释里常出现示例值，注释不是可执行代码
+  const docRe = /(SKILL|SECURITY_CHECKLIST|KNOWN_BUGS|TECH_DESIGN|api-contract)/i;
+  const selfRe = /verify-project\.js$/i;
+  const reMeta = /[|\+\[\]?*\\]{2,}/;   // 多个正则元字符 → 是模式串不是密钥
+
+  hist.blobs.forEach(function (b) {
+    if (selfRe.test(b.name || "")) return;   // 检查器自身
+    if (docRe.test(b.name || "")) return;    // 坑记录 / 契约文档
+    (b.content || "").split("\n").forEach(function (line) {
+      if (line.indexOf("grep -") >= 0) return;
+      const t = line.trim();
+      if (t.indexOf("//") === 0) return;                    // 单行注释
+      if (t.indexOf("*") === 0) return;                     // 块注释 / 续行
+      if (t.indexOf("/*") === 0) return;
+      if (/^[|>#*`]/.test(t)) return;                       // Markdown 正文
+      if (reMeta.test(line) && line.indexOf("=") >= 0) return;  // 正则模式串
+      if (histRe.test(line)) histList.push(b.name + "　" + t.slice(0, 100));
+    });
   });
   const histHits = histList.join("\n");
   record("⑨", "Git 全部历史里也没有密钥",

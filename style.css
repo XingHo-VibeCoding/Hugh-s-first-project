@@ -1117,3 +1117,256 @@ select:disabled {
     transition: none !important;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   培养方案导入（Day 26）
+   位置：课程板块的表单下面，和手动录入并列
+   --------------------------------------------------------------------------- */
+
+.import-zone {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--line, #e2e0d8);
+}
+
+.import-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  cursor: pointer;
+  list-style: none;
+  padding: 2px 0;
+  border-radius: 6px;
+}
+.import-head::-webkit-details-marker {
+  display: none;
+}
+
+.import-head::before {
+  content: "";
+  width: 0;
+  height: 0;
+  border-left: 5px solid #8a8983;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  transition: transform 0.15s ease;
+  flex: 0 0 auto;
+}
+.import-zone[open] .import-head::before {
+  transform: rotate(90deg);
+}
+
+.import-title {
+  font-size: 13.5px;
+  color: #185fa5;
+  font-weight: 500;
+}
+.import-head:hover .import-title {
+  text-decoration: underline;
+}
+
+.import-tip {
+  color: #8a8983;
+  font-size: 12px;
+  flex: 1 1 260px;
+}
+
+.import-body {
+  padding: 12px 0 4px 15px;
+}
+.import-zone[open] .import-body {
+  border-left: 2px solid #e2e0d8;
+  margin-left: 1px;
+}
+
+.import-summary {
+  display: flex;
+  gap: 22px;
+  flex-wrap: wrap;
+  margin: 14px 0 10px;
+  font-size: 13px;
+  color: #5f5e5a;
+}
+.import-summary b {
+  display: block;
+  font-size: 19px;
+  font-weight: 500;
+  color: #23231f;
+  font-variant-numeric: tabular-nums;
+}
+.import-summary b.warn-text {
+  color: #9a6a12;
+}
+
+.import-bulk {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.import-scroll {
+  max-height: 420px;
+  overflow: auto;
+  border: 1px solid #e2e0d8;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.import-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.import-table th,
+.import-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid #efedE6;
+  text-align: left;
+  vertical-align: middle;
+}
+.import-table thead th {
+  position: sticky;
+  top: 0;
+  background: #faf9f6;
+  color: #5f5e5a;
+  font-weight: 500;
+  z-index: 1;
+  box-shadow: inset 0 -1px 0 #e2e0d8;
+}
+.import-table tbody tr:hover {
+  background: #faf9f6;
+}
+.import-table tbody tr.is-dup {
+  background: #fdf6f2;
+}
+.import-table tbody tr.is-dup:hover {
+  background: #fbeee7;
+}
+
+.import-table .c-pick {
+  width: 44px;
+  text-align: center;
+}
+.import-table .c-num {
+  width: 82px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.import-table input[type="text"],
+.import-table input[type="number"],
+.import-table select {
+  width: 100%;
+  font: inherit;
+  font-size: 13px;
+  padding: 4px 6px;
+  border: 1px solid #d8d5cc;
+  border-radius: 6px;
+  background: #fff;
+  color: #23231f;
+}
+.import-table input[type="number"] {
+  text-align: right;
+}
+.import-table input:focus,
+.import-table select:focus {
+  outline: 2px solid #7fb2e6;
+  outline-offset: -1px;
+  border-color: #7fb2e6;
+}
+
+.import-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+
+.import-note {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: #8a8983;
+  line-height: 1.6;
+}
+
+#import-status.ok {
+  color: #0f6e56;
+}
+#import-status.err {
+  color: #a33a2c;
+}
+
+@media (max-width: 640px) {
+  .import-table .c-num {
+    width: 62px;
+  }
+  .import-table input,
+  .import-table select {
+    font-size: 12px;
+    padding: 3px 4px;
+  }
+}
+
+/* 导入：会被拒绝的课程（学分不合法等） */
+.import-table tbody tr.is-blocked {
+  background: #fdf0f0;
+}
+.import-table tbody tr.is-blocked:hover {
+  background: #fbe6e6;
+}
+
+.import-summary b.bad-text {
+  color: #a33a2c;
+}
+
+.import-warn {
+  margin: 0 0 12px;
+  padding: 9px 11px;
+  border-radius: 8px;
+  background: #fdf0f0;
+  border: 1px solid #f0d0d0;
+  color: #8a2f22;
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.blocked-tip {
+  display: inline-block;
+  margin-left: 6px;
+  width: 16px;
+  height: 16px;
+  line-height: 16px;
+  text-align: center;
+  border-radius: 50%;
+  background: #a33a2c;
+  color: #fff;
+  font-size: 11px;
+  cursor: help;
+  vertical-align: 1px;
+}
+
+.import-table .muted {
+  color: #b6b4ac;
+}
+
+/* 导入结果提示：放在 details 外面，导入完收起面板也还能看到 */
+#import-status {
+  margin: 10px 0 0;
+  padding: 9px 12px;
+  border-radius: 8px;
+  background: #e4f0ec;
+  border: 1px solid #c9e0d8;
+  color: #14453c;
+  font-size: 13px;
+  line-height: 1.6;
+}
+#import-status[hidden] {
+  display: none;
+}
+#import-status.err {
+  background: #fdf0f0;
+  border-color: #f0d0d0;
+  color: #8a2f22;
+}

@@ -40,7 +40,7 @@
 
         <form class="form-row" id="category-form">
           <input type="text" id="category-name" placeholder="板块名，如：专业选修" maxlength="20">
-          <input type="number" id="category-credits" step="0.5" min="0.5" placeholder="要求学分（可留空）">
+          <input type="number" id="category-credits" step="0.25" min="0.25" placeholder="要求学分（可留空）">
           <input type="text" id="category-note" placeholder="特殊条件备注（可留空）" maxlength="100">
           <button type="submit" class="btn">添加板块</button>
         </form>
@@ -70,7 +70,7 @@
 
         <form class="form-row form-row-course" id="course-form">
           <input type="text" id="course-name" placeholder="课程名，如：高等数学" maxlength="30">
-          <input type="number" id="course-credits" step="0.5" min="0.5" placeholder="学分">
+          <input type="number" id="course-credits" step="0.25" min="0.25" placeholder="学分">
           <select id="course-category">
             <option value="">选择板块</option>
           </select>
@@ -83,6 +83,19 @@
         </form>
         <p class="form-error" id="course-error" hidden></p>
         <p class="form-feedback" id="course-feedback" hidden></p>
+
+<details class="import-zone" id="import-zone">
+  <summary class="import-head">
+  <span class="import-title">从培养方案导入课程</span>
+            <span class="import-tip">支持 PDF / Word。文件只在你自己的浏览器里解析，不会上传。</span>
+ </summary>
+          <p class="form-feedback" id="import-status" role="status" aria-live="polite" hidden></p>
+    <div class="import-body">
+            <button type="button" class="btn-ghost" id="import-open">选择培养方案文件</button>
+<input type="file" id="import-file" accept=".pdf,.docx,application/pdf" hidden>
+            <div id="import-result"></div>
+          </div>
+        </details>
 
         <div class="filter-row" id="course-filter">
           <input type="text" id="filter-keyword" placeholder="搜课程关键词" aria-label="按关键词筛选课程">
@@ -159,7 +172,7 @@
       <p class="dev-title">开发者工具（演示页面状态与示例数据用，正式版本会移除）</p>
       <div class="dev-tools">
         <button type="button" class="btn-ghost" id="mock-load">载入示例数据</button>
-        <button type="button" class="btn-ghost" id="mock2-load">载入示例数据 2 · 天文学专业（92 门）</button>
+        <button type="button" class="btn-ghost" id="mock2-load">载入示例数据 2 · 天文学专业（100 门）</button>
         <button type="button" class="btn-ghost" id="mock-clear" hidden>清除示例</button>
         <label class="dev-label" for="state-preview">状态预览</label>
         <select id="state-preview">
@@ -195,5 +208,9 @@
 
   <script src="store.js"></script>
   <script src="app.js"></script>
+  <script src="importer/extract-courses.js"></script>
+  <script src="importer/pdf-reader.js"></script>
+  <script src="importer/docx-reader.js"></script>
+  <script src="importer/importer-ui.js"></script>
 </body>
 </html>

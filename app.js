@@ -51,8 +51,8 @@ function validateCategory(input) {
     if (credits <= 0) {
       return { ok: false, error: "要求学分要大于 0；不确定就留空。" };
     }
-    if (Math.round(credits * 2) !== credits * 2) {
-      return { ok: false, error: "要求学分需为 0.5 的整数倍（如 0.5 / 1.5 / 12）。" };
+    if (!isValidCreditStep(credits)) {
+      return { ok: false, error: REQUIRED_CREDIT_STEP_HINT };
     }
   }
 
@@ -144,13 +144,13 @@ function validateCourse(input, data) {
 
   const credits = input.credits;
   if (credits === null || credits === undefined || typeof credits !== "number" || isNaN(credits)) {
-    return { ok: false, error: "请填写学分（可填 0.5 的整数倍，如 3 或 1.5）。" };
+    return { ok: false, error: CREDIT_FILL_HINT };
   }
   if (credits <= 0) {
     return { ok: false, error: "学分要大于 0。" };
   }
-  if (Math.round(credits * 2) !== credits * 2) {
-    return { ok: false, error: "学分需为 0.5 的整数倍（如 0.5 / 1.5 / 3）。" };
+  if (!isValidCreditStep(credits)) {
+    return { ok: false, error: CREDIT_STEP_HINT };
   }
 
   if (!input.categoryId) {
@@ -185,8 +185,24 @@ function validateCourse(input, data) {
 }
 
 // ---------------------------------------------------------------------------
-// 实时校验（Day 12·③）：边输入边提示，哪个框错了哪个框红
+// 学分粒度：0.25 的整数倍
 // ---------------------------------------------------------------------------
+// 【为什么从 0.5 放宽到 0.25】（Day 26）
+// 原来只允许 0.5 的整数倍，是当初为了防止输错设的。
+// 但实测真实的 2025 版培养方案里，「形势与政策」这类课就是 0.25 学分/学期，
+// 共 8 门。按原来的规则，这 8 门课一节都导不进来，用户还得逐个手动改学分 ——
+// 本来是「自动导入」，结果变成了「自动导入 + 手工修补」，违背了这个功能的意义。
+// 所以放宽到 0.25，取「四分之一学分」这个粒度，够用且仍能挡住误输入（如 1.3）。
+//
+// 四处校验（板块要求、课程学分、实时提示 ×2）统一走这里，
+// 免得改一处漏一处 —— 这是之前维护校验文案时踩过的坑。
+function isValidCreditStep(value) {
+  return Math.round(value * 4) === value * 4;
+}
+
+const CREDIT_STEP_HINT = "学分需为 0.25 的整数倍（如 0.25 / 0.5 / 1.5 / 3）";
+const REQUIRED_CREDIT_STEP_HINT = "要求学分需为 0.25 的整数倍（如 0.25 / 1.5 / 12）";
+const CREDIT_FILL_HINT = "请填写学分（可填 0.25 的整数倍，如 3、1.5 或 0.25）";
 
 // 字段级错误字典：只针对单个字段可即时判定的规则，返回 { 字段键: 错误文案 }
 function liveErrorsCategory(input) {
@@ -199,7 +215,7 @@ function liveErrorsCategory(input) {
     const c = input.requiredCredits;
     if (typeof c !== "number" || isNaN(c)) errors.credits = "要求学分请填数字（可留空）。";
     else if (c <= 0) errors.credits = "要求学分要大于 0；不确定就留空。";
-    else if (Math.round(c * 2) !== c * 2) errors.credits = "要求学分需为 0.5 的整数倍（如 0.5 / 1.5 / 12）。";
+    else if (!isValidCreditStep(c)) errors.credits = REQUIRED_CREDIT_STEP_HINT;
   }
 
   if ((input.note || "").length > 100) errors.note = "特殊条件备注请控制在 100 个字以内。";
@@ -214,11 +230,11 @@ function liveErrorsCourse(input, data) {
 
   const credits = input.credits;
   if (credits === null || credits === undefined || typeof credits !== "number" || isNaN(credits)) {
-    errors.credits = "请填写学分（可填 0.5 的整数倍，如 3 或 1.5）。";
+    errors.credits = CREDIT_FILL_HINT;
   } else if (credits <= 0) {
     errors.credits = "学分要大于 0。";
-  } else if (Math.round(credits * 2) !== credits * 2) {
-    errors.credits = "学分需为 0.5 的整数倍（如 0.5 / 1.5 / 3）。";
+  } else if (!isValidCreditStep(credits)) {
+    errors.credits = CREDIT_STEP_HINT;
   }
 
   if (!input.categoryId) errors.categoryId = "请选择所属板块。";
@@ -1947,6 +1963,122 @@ function applyViewState(value) {
 }
 
 // ---------------------------------------------------------------------------
+// 十、培养方案导入（Day 26）
+// ---------------------------------------------------------------------------
+// 导入面板（importer-ui.js）只负责「解析文件 → 让用户确认」，
+// 真正写数据的事交给这里 —— 这样数据只有一条写入路径，
+// 不会出现「表单加的课」和「导入的课」行为不一致的情况。
+//
+// 入参 items：[{ name, credits, section, term }]
+//   section 是解析出来的板块名，可能匹配不上现有板块（比如用户已经改过名字），
+//   所以逐条尝试匹配，匹配不上的留给用户手动选。
+// 返回 { ok, added, skipped, categories, message }
+
+function findCategoryIdByName(categories, name) {
+  if (!name) return "";
+  const target = String(name).replace(/\s+/g, "").toLowerCase();
+  for (const c of categories) {
+    const cn = String(c.name || "").replace(/\s+/g, "").toLowerCase();
+    if (cn === target) return c.id;
+    // 「专业核心课程」vs「专业核心」这类包含关系也算命中
+    if (cn && (cn.indexOf(target) !== -1 || target.indexOf(cn) !== -1)) return c.id;
+  }
+  return "";
+}
+
+// 先按解析出来的板块名建板块；已存在的直接复用
+function ensureCategories(data, sectionNames) {
+  const created = [];
+  const names = Array.from(new Set(sectionNames.filter(Boolean)));
+  for (const name of names) {
+    if (findCategoryIdByName(data.categories, name)) continue;
+    const result = addCategory(data, { name: name, requiredCredits: null, note: "由培养方案导入自动创建" });
+    if (result.ok) {
+      data = result.data;
+      created.push(result.data.categories[result.data.categories.length - 1].name);
+    }
+  }
+  return { data: data, created: created };
+}
+
+function importPlanItems(items) {
+  if (mockMode) {
+    return { ok: false, message: "示例数据模式下不能导入。请先点「清除示例」回到你自己的数据。" };
+  }
+  if (!Array.isArray(items) || !items.length) {
+    return { ok: false, message: "没有可导入的课程。" };
+  }
+
+  let added = 0;
+  const skipped = [];
+  const unclassified = [];
+
+  // 先把用到的板块建出来
+  const sectionNames = items.map(function (it) { return it.section; });
+  const ensured = ensureCategories(state, sectionNames);
+  state = ensured.data;
+
+  for (const it of items) {
+    const name = (it.name || "").trim();
+    if (!name) continue;
+
+    // 已经有同名课程就跳过，不重复添加
+    const dup = state.courses.some(function (c) { return c.name === name; });
+    if (dup) {
+      skipped.push(name);
+      continue;
+    }
+
+    const catId = findCategoryIdByName(state.categories, it.section);
+    if (!catId) unclassified.push(name);
+
+    const result = addCourse(state, {
+      name: name,
+      credits: Number(it.credits),
+      categoryId: catId,
+      status: "planned",          // 导入的课默认算「计划修」，用户改成「已修」
+      score: null
+    });
+    if (result.ok) {
+      state = result.data;
+      added++;
+    } else {
+      skipped.push(name);
+    }
+  }
+
+  if (added > 0) {
+    persist();
+    renderAll();
+  }
+
+  let message = "已导入 " + added + " 门课程。";
+  if (skipped.length) message += " 跳过 " + skipped.length + " 门（已存在或数据不合法）。";
+  if (unclassified.length) message += " 其中 " + unclassified.length + " 门没归到板块，需要你手动选。";
+
+  return {
+    ok: true,
+    added: added,
+    skipped: skipped,
+    unclassified: unclassified,
+    categoriesCreated: ensured.created,
+    message: message
+  };
+}
+
+// 导入用到的现有板块，供导入面板显示下拉选项
+function listCategories() {
+  return state.categories.map(function (c) {
+    return { id: c.id, name: c.name, requiredCredits: c.requiredCredits };
+  });
+}
+
+// 导入前查重：告诉用户哪些已经在列表里了
+function listExistingCourseNames() {
+  return state.courses.map(function (c) { return c.name; });
+}
+
+// ---------------------------------------------------------------------------
 // 九、事件
 // ---------------------------------------------------------------------------
 
@@ -2267,7 +2399,7 @@ function bindEvents() {
     });
   }
 
-  // dev：载入示例数据 2 · 天文学专业（92 门，用来压页面的真实规模）
+  // dev：载入示例数据 2 · 天文学专业（98+2 门，用来压页面的真实规模）
   const mockLoad2 = document.getElementById("mock2-load");
   if (mockLoad2) {
     mockLoad2.addEventListener("click", function () {
@@ -2370,6 +2502,9 @@ window.CreditApp = {
   gradePoint: gradePoint,
   cloneData: cloneData,
   buildSummaryText: buildSummaryText,
+  importPlanItems: importPlanItems,
+  listCategories: listCategories,
+  listExistingCourseNames: listExistingCourseNames,
   MOCK_DATA: MOCK_DATA,
   MOCK_DATA_2: MOCK_DATA_2
 };

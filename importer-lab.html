@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>培养方案导入 · 解析验证台</title>
+<style>
+:root {
+  --bg: #f6f5f1;
+  --panel: #ffffff;
+  --ink: #23231f;
+  --ink-2: #5f5e5a;
+  --ink-3: #8a8983;
+  --line: #e2e0d8;
+  --accent: #1d6f5f;
+  --accent-soft: #e4f0ec;
+  --warn: #9a6a12;
+  --warn-soft: #fbf1dc;
+  --err: #a33a2c;
+  --err-soft: #fbe9e5;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+               "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.wrap { max-width: 1000px; margin: 0 auto; padding: 28px 20px 60px; }
+header { margin-bottom: 22px; }
+h1 { font-size: 19px; font-weight: 500; margin: 0 0 6px; }
+.sub { color: var(--ink-2); margin: 0; font-size: 13px; }
+.stage-note {
+  margin-top: 14px; padding: 10px 12px;
+  background: var(--accent-soft); border: 1px solid #c9e0d8;
+  border-radius: 8px; font-size: 13px; color: #14453c;
+}
+
+.drop {
+  border: 2px dashed var(--line); border-radius: 12px;
+  background: var(--panel); padding: 34px 20px; text-align: center;
+  cursor: pointer; transition: border-color .15s, background .15s;
+}
+.drop:hover, .drop.over { border-color: var(--accent); background: var(--accent-soft); }
+.drop strong { display: block; font-size: 15px; font-weight: 500; margin-bottom: 6px; }
+.drop span { color: var(--ink-3); font-size: 13px; }
+#file { display: none; }
+
+.bar { margin: 14px 0; font-size: 13px; color: var(--ink-2); min-height: 20px; }
+.bar .ok { color: var(--accent); }
+.bar .bad { color: var(--err); }
+
+.panel {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: 12px; padding: 18px 20px; margin-top: 16px;
+}
+.panel h2 {
+  font-size: 14px; font-weight: 500; margin: 0 0 4px;
+  display: flex; align-items: center; gap: 8px;
+}
+.count {
+  background: var(--accent-soft); color: var(--accent);
+  border-radius: 20px; padding: 1px 9px; font-size: 12px; font-weight: 500;
+}
+.hint { color: var(--ink-3); font-size: 12px; margin: 0 0 14px; }
+
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); }
+th { color: var(--ink-2); font-weight: 500; background: #faf9f6; }
+th:first-child, td:first-child { width: 34px; color: var(--ink-3); }
+td.num { text-align: right; font-variant-numeric: tabular-nums; width: 76px; }
+td.sec { color: var(--ink-2); width: 130px; }
+tbody tr:hover { background: #faf9f6; }
+
+.msg { padding: 10px 12px; border-radius: 8px; font-size: 13px; margin-top: 10px; }
+.msg.warn { background: var(--warn-soft); color: var(--warn); }
+.msg.err { background: var(--err-soft); color: var(--err); }
+.msg ul { margin: 6px 0 0; padding-left: 20px; }
+.msg li { margin: 3px 0; }
+
+.sum { display: flex; gap: 26px; flex-wrap: wrap; margin-top: 14px; }
+.sum div { font-size: 13px; }
+.sum b { display: block; font-size: 19px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.sum .match { color: var(--accent); }
+.sum .miss { color: var(--err); }
+
+details { margin-top: 14px; }
+summary { cursor: pointer; font-size: 13px; color: var(--ink-2); }
+pre {
+  background: #faf9f6; border: 1px solid var(--line); border-radius: 8px;
+  padding: 12px; overflow: auto; max-height: 380px;
+  font-size: 12px; line-height: 1.5; color: var(--ink-2);
+  font-family: ui-monospace, Consolas, "Courier New", monospace;
+}
+.empty { color: var(--ink-3); font-size: 13px; padding: 10px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>培养方案导入 · 解析验证台</h1>
+    <p class="sub">拖一份培养方案进来（PDF 或 Word），看看能不能认出课程名、学分和板块。</p>
+    <p class="stage-note">
+      这是第 1 步的独立验证页，<strong>不改动网站、不写入数据库</strong>。它只负责把「文件里有什么」如实打印出来。
+    </p>
+  </header>
+
+  <div class="drop" id="drop">
+    <strong>把文件拖到这里，或点击选择</strong>
+    <span>支持 .pdf / .docx；文件不会上传，全部在你自己的浏览器里解析</span>
+    <input type="file" id="file" accept=".pdf,.docx,application/pdf">
+  </div>
+
+  <div class="bar" id="bar"></div>
+  <div id="out"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="importer/extract-courses.js"></script>
+<script src="importer/pdf-reader.js"></script>
+<script src="importer/docx-reader.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  var CDN_PDF = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+  var CDN_WORKER = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+  var drop = document.getElementById("drop");
+  var input = document.getElementById("file");
+  var bar = document.getElementById("bar");
+  var out = document.getElementById("out");
+
+  // pdf.js 需要单独指明 worker 文件
+  function ensureWorker() {
+    if (!window.pdfjsLib) throw new Error("pdf.js 没加载成功，请联网后刷新页面");
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc = CDN_WORKER;
+  }
+
+  drop.addEventListener("click", function () { input.click(); });
+  drop.addEventListener("dragover", function (e) {
+    e.preventDefault(); drop.classList.add("over");
+  });
+  drop.addEventListener("dragleave", function () { drop.classList.remove("over"); });
+  drop.addEventListener("drop", function (e) {
+    e.preventDefault(); drop.classList.remove("over");
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) handle(e.dataTransfer.files[0]);
+  });
+  input.addEventListener("change", function () {
+    if (input.files && input.files[0]) handle(input.files[0]);
+  });
+
+  function esc(s) {
+    return String(s).replace(/[&<>"]/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+    });
+  }
+
+  function setBar(text, cls) {
+    bar.innerHTML = '<span class="' + (cls || "") + '">' + text + "</span>";
+  }
+
+  function handle(file) {
+    out.innerHTML = "";
+    var name = file.name.toLowerCase();
+    setBar("正在解析 " + esc(file.name) + "（" + Math.round(file.size / 1024) + " KB）…");
+
+    var isPdf = /\.pdf$/.test(name) || file.type === "application/pdf";
+    var isDocx = /\.docx$/.test(name) ||
+      file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
+    if (!isPdf && !isDocx) {
+      setBar("不支持这种文件", "bad");
+      out.innerHTML = '<div class="msg err">目前只支持 <strong>.pdf</strong> 和 <strong>.docx</strong>。' +
+        "如果是老的 <strong>.doc</strong>，请先在 Word 里另存为 .docx。</div>";
+      return;
+    }
+
+    var parsePromise;
+    try {
+      ensureWorker();
+    } catch (err) {
+      setBar(err.message, "bad");
+      return;
+    }
+
+    if (isPdf) {
+      parsePromise = window.PDFReader.parse(file, {
+        onProgress: function (p, n) { setBar("正在读第 " + p + " / " + n + " 页…"); }
+      });
+    } else {
+      parsePromise = window.DocxReader.parse(file);
+    }
+
+    parsePromise.then(function (res) {
+      render(file, res, isPdf);
+    }).catch(function (err) {
+      setBar("解析失败", "bad");
+      out.innerHTML = '<div class="msg err"><strong>解析失败：</strong>' + esc(err.message || String(err)) + "</div>";
+    });
+  }
+
+  function render(file, res, isPdf) {
+    var matrix = res.matrix || [];
+    setBar("读完了：" + esc(file.name) + "，共 " + matrix.length + " 行原始数据", "ok");
+
+    var result = window.CourseExtractor.extractCourses(matrix);
+    var rows = result.rows || [];
+    var declared = window.CourseExtractor.findDeclaredTotal(res.text);
+    var sum = rows.reduce(function (a, r) { return a + r.credits; }, 0);
+
+    // 明显可疑的课程名
+    // 【判据说明】不能只看长度 —— 真实培养方案里真的有「党史」这种 2 字课名。
+    // 真正可疑的是：括号没闭合（折行被截断）、或是新课程名的一部分。
+    var suspicious = rows.filter(function (r) {
+      var n = r.name;
+      if (/[（(][^）)]*$/.test(n)) return true;      // 括号没闭合
+      if (/^[）)]/.test(n)) return true;
+      if (/^(业指导|处理|讲座|类）|物理学|理论$|查$|涯规划)/.test(n)) return true;
+      if (n.length > 30) return true;
+      return false;
+    });
+    var unclassified = rows.filter(function (r) { return !r.section; });
+
+    var html = "";
+
+    // ---- 概况 ----
+    html += '<div class="panel"><h2>解析概况</h2>';
+    html += '<div class="sum">';
+    html += "<div><b>" + rows.length + "</b>认出的课程数</div>";
+    html += '<div><b>' + sum.toFixed(1) + "</b>这些课的学分合计</div>";
+    if (declared !== null) {
+      var diff = Math.abs(sum - declared);
+      var cls = diff < 1 ? "match" : "miss";
+      html += '<div><b class="' + cls + '">' + declared + "</b>文档声明的总学分</div>";
+      html += "<div><b class=\"" + cls + '">' + diff.toFixed(1) + "</b>与实际相差</div>";
+    }
+    html += "</div>";
+
+    // ---- 质量评估：如实说，不粉饰 ----
+    var rate = rows.length ? Math.round((rows.length - suspicious.length) / rows.length * 100) : 0;
+    html += '<div class="msg ' + (rate >= 95 ? "warn" : "err") + '" style="margin-top:14px">';
+    html += "<strong>准确度自查：</strong>";
+    html += "课程名看起来正常的约 <strong>" + rate + "%</strong>（" +
+      (rows.length - suspicious.length) + " / " + rows.length + "门）；";
+    html += "其中 <strong>" + unclassified.length + " 门</strong>没能自动归到板块。";
+    if (suspicious.length) {
+      html += "<br>疑似没读对的：" +
+        suspicious.slice(0, 8).map(function (r) { return "「" + esc(r.name) + "」"; }).join("、") +
+        (suspicious.length > 8 ? " 等 " + suspicious.length + " 条" : "");
+    }
+    html += "<br><span style=\"opacity:.8\">导入后请务必逐条核对，尤其带「板块」的那几列。</span>";
+    html += "</div>";
+
+    html += '<p class="hint" style="margin-top:12px">' +
+      "来源：" + (isPdf ? "PDF 文本层（坐标重建表格）" : "Word 原生表格") +
+      "；原始片段 " + (res.items !== undefined ? res.items + " 个" : (res.tables + " 张表")) +
+      "；表头" + (result.stats.headerFound ? "已找到" : "<strong>未找到</strong>") +
+      "。</p></div>";
+
+    // ---- 提示 ----
+    if (result.warnings.length) {
+      html += '<div class="panel"><h2>解析提示</h2><div class="msg ' +
+        (result.warnings[0].level === "error" ? "err" : "warn") + '"><ul>';
+      result.warnings.slice(0, 40).forEach(function (w) {
+        html += "<li>" + esc(w.text) + "</li>";
+      });
+      if (result.warnings.length > 40) {
+        html += "<li>…还有 " + (result.warnings.length - 40) + " 条没显示</li>";
+      }
+      html += "</ul></div></div>";
+    }
+
+    // ---- 文档声明的板块要求 ----
+    if (result.sections && result.sections.length) {
+      html += '<div class="panel"><h2>文档里写明的板块要求</h2>';
+      html += "<p class=\"hint\">这些数字是培养方案原文里写的，可以用来跟系统算出来的学分对账。</p>";
+      html += '<table><thead><tr><th>板块</th><th class="num">要求学分</th></tr></thead><tbody>';
+      result.sections.forEach(function (s) {
+        html += "<tr><td>" + esc(s.name) + "</td><td class='num'>" + s.required + "</td></tr>";
+      });
+      html += "</tbody></table></div>";
+    }
+
+    // ---- 课程表 ----
+    html += '<div class="panel"><h2>认出的课程 <span class="count">' + rows.length + "</span></h2>";
+    if (!rows.length) {
+      html += '<p class="empty">一门课都没认出来。这通常说明这份文件的排版跟预期差太远，' +
+        "把下面的「原始数据」发我，我照着调规则。</p>";
+    } else {
+html += "<table><thead><tr><th>#</th><th>课程名</th><th class='num'>学分</th><th class='num'>学期</th><th>所属板块</th></tr></thead><tbody>";
+      rows.forEach(function (r, i) {
+        var bad = suspicious.some(function (s) { return s.name === r.name; });
+    html += "<tr" + (bad ? " style='background:#fdf3f0'" : "") + ">" +
+      "<td>" + (i + 1) + "</td>" +
+     "<td>" + esc(r.name) + (bad ? " <span style='color:#a33a2c'>?</span>" : "") + "</td>" +
+   "<td class='num'>" + r.credits + "</td>" +
+        "<td class='num'>" + (r.term ? esc(r.term) : "<span style='color:#b6b4ac'>—</span>") + "</td>" +
+        "<td class='sec'>" + (r.section ? esc(r.section) : "<span style='color:#b6b4ac'>未归类</span>") + "</td></tr>";
+  });
+      html += "</tbody></table>";
+      html += '<p class="hint" style="margin-top:12px">标红带「?」的几条是没读准的，别直接用。' +
+        "「未归类」的课程需要你手动选板块；「学期」是培养方案里写的推荐修读学期。</p>";
+    }
+    html += "</div>";
+
+    // ---- 调试：原始数据 ----
+    html += '<div class="panel"><details><summary>查看原始数据（排障用，共 ' +
+      matrix.length + " 行）</summary><pre>" +
+      esc(window.PDFReader.debugRows(matrix, 0, 120)) +
+      (matrix.length > 120 ? "\n… 还有 " + (matrix.length - 120) + " 行" : "") +
+      "</pre></details></div>";
+
+    out.innerHTML = html;
+  }
+})();
+</script>
+</body>
+</html>

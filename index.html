@@ -81,10 +81,18 @@
           <input type="number" id="course-score" min="0" max="100" step="1" placeholder="成绩（可选）">
           <button type="submit" class="btn">添加课程</button>
         </form>
-        <p class="form-error" id="course-error" hidden></p>
+  <p class="form-error" id="course-error" hidden></p>
         <p class="form-feedback" id="course-feedback" hidden></p>
 
-<details class="import-zone" id="import-zone">
+        <div class="review-entry">
+          <button type="button" class="btn-ghost" id="review-open">凭记忆确认已修的课</button>
+          <span class="import-tip">
+            导入的课都记为「计划修」。这个清单让你按记忆一路点过去，把修过的改成「已修」，
+          可顺手填成绩。默认什么都不改，点「完成」才保存。
+          </span>
+        </div>
+
+        <details class="import-zone" id="import-zone">
   <summary class="import-head">
   <span class="import-title">从培养方案导入课程</span>
             <span class="import-tip">支持 PDF / Word。文件只在你自己的浏览器里解析，不会上传。</span>
@@ -219,5 +227,42 @@
   <script src="importer/pdf-reader.js"></script>
   <script src="importer/docx-reader.js"></script>
   <script src="importer/importer-ui.js"></script>
+  <script src="review/review-ui.js"></script>
+
+  <!-- 凭记忆确认已修 · 清单页（Day 26）
+       做成覆盖整页的浮层而不是又一个 tab：这是一次性的专注任务，
+       中途不该被侧边导航分心。不点「完成」不会写任何数据。 -->
+  <div class="review-overlay" id="review-overlay" role="dialog" aria-modal="true"
+       aria-labelledby="review-title" hidden>
+    <div class="review-panel">
+      <header class="review-head">
+        <h2 id="review-title">凭记忆确认已修</h2>
+        <button type="button" class="review-x" data-act="close" aria-label="关闭">×</button>
+      </header>
+
+      <p class="review-lede">
+        按学期排好了。凭印象点过去就行——记不清就跳过，不点就不会被改。
+      </p>
+
+      <div class="review-bar" id="review-bar"></div>
+
+      <div class="review-list" id="review-list" tabindex="-1"></div>
+
+      <p class="review-note" id="review-note" role="status" aria-live="polite" hidden></p>
+
+      <div class="review-actions" id="review-actions">
+        <button type="button" class="btn" data-act="confirm">完成并保存</button>
+        <button type="button" class="btn-ghost" data-act="next-todo">跳到下一个没决定的</button>
+        <button type="button" class="btn-ghost" data-act="undo">撤销上一个</button>
+        <button type="button" class="btn-ghost" data-act="reset">全部重置</button>
+        <button type="button" class="btn-ghost" data-act="close">不保存，关闭</button>
+      </div>
+
+      <p class="review-keys">
+        键盘：<kbd>↑</kbd><kbd>↓</kbd> 或 <kbd>j</kbd><kbd>k</kbd> 移动 ·
+        <kbd>y</kbd> 修过 · <kbd>n</kbd> 没修过 · <kbd>u</kbd> 撤销 · <kbd>Enter</kbd> 完成 · <kbd>Esc</kbd> 关闭
+      </p>
+    </div>
+  </div>
 </body>
 </html>

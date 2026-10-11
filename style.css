@@ -1449,3 +1449,349 @@ select:disabled {
     font-size: 19px;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   凭记忆确认已修（Day 26）
+   做成覆盖整页的浮层：这是一次性专注任务，不该被侧边导航分心。
+   --------------------------------------------------------------------------- */
+
+.review-entry {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 12px 0 4px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #f4f7fa;
+  border: 1px solid #dde7ef;
+}
+.review-entry .import-tip {
+  flex: 1 1 280px;
+  line-height: 1.6;
+}
+
+/* 浮层本体 */
+.review-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(28, 28, 24, 0.42);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 28px 16px;
+  overflow: auto;
+}
+.review-overlay[hidden] {
+  display: none;
+}
+
+/* 打开时锁掉背景滚动 */
+body.review-locked {
+  overflow: hidden;
+}
+
+.review-panel {
+  width: 100%;
+  max-width: 760px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+  padding: 18px 20px 16px;
+}
+
+.review-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+.review-head h2 {
+  font-size: 16px;
+  font-weight: 500;
+  margin: 0;
+  flex: 1;
+}
+.review-x {
+  border: none;
+  background: transparent;
+  font-size: 22px;
+  line-height: 1;
+  color: #8a8983;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+.review-x:hover {
+  background: #f2f1ec;
+  color: #23231f;
+}
+
+.review-lede {
+  margin: 0 0 14px;
+  font-size: 12.5px;
+  color: #8a8983;
+  line-height: 1.6;
+}
+
+/* 顶部四个数 */
+.review-bar {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: #faf9f6;
+  border: 1px solid #eeece4;
+  margin-bottom: 14px;
+}
+.rv-stat span {
+  display: block;
+  font-size: 11.5px;
+  color: #8a8983;
+  margin-bottom: 1px;
+}
+.rv-stat b {
+  font-size: 21px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+}
+.rv-stat.is-good b {
+  color: #0f6e56;
+}
+
+/* 筛选 chip */
+.rv-filters {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.rv-chip {
+  border: 1px solid #e2e0d8;
+  background: #fff;
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 12.5px;
+  color: #5f5e5a;
+  cursor: pointer;
+}
+.rv-chip:hover {
+  background: #faf9f6;
+}
+.rv-chip.is-on {
+  background: #185fa5;
+  border-color: #185fa5;
+  color: #fff;
+}
+
+/* 课程行 */
+.review-list {
+  max-height: min(56vh, 520px);
+  overflow: auto;
+  border: 1px solid #e8e6de;
+  border-radius: 10px;
+}
+.review-list:focus {
+  outline: none;
+}
+
+.rv-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.rv-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 12px;
+  border-bottom: 1px solid #f2f1ec;
+  flex-wrap: wrap;
+}
+.rv-row:last-child {
+  border-bottom: none;
+}
+.rv-row.is-cursor {
+  background: #f4f8fc;
+  box-shadow: inset 3px 0 0 #185fa5;
+}
+.rv-row.is-done {
+  background: #f2f8f5;
+}
+.rv-row.is-done.is-cursor {
+  background: #eaf4f0;
+  box-shadow: inset 3px 0 0 #0f6e56;
+}
+.rv-row.is-skip {
+  background: #faf9f6;
+}
+.rv-row.is-skip.is-cursor {
+  background: #f4f2ea;
+  box-shadow: inset 3px 0 0 #b6b4ac;
+}
+
+.rv-main {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+.rv-name {
+  display: block;
+  font-size: 14px;
+  color: #23231f;
+  line-height: 1.4;
+  word-break: break-all;
+}
+.rv-row.is-skip .rv-name {
+  color: #8a8983;
+  text-decoration: line-through;
+  text-decoration-color: #d8d5cc;
+}
+.rv-meta {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: #8a8983;
+}
+.rv-credits {
+  font-variant-numeric: tabular-nums;
+}
+.rv-term {
+  color: #185fa5;
+}
+
+.rv-btns {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex: 0 0 auto;
+}
+.rv-btn {
+  border: 1px solid #d8d5cc;
+  background: #fff;
+  border-radius: 7px;
+  padding: 5px 12px;
+  font-size: 12.5px;
+  color: #5f5e5a;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.rv-btn:hover {
+  background: #faf9f6;
+}
+.rv-yes.is-on {
+  background: #0f6e56;
+  border-color: #0f6e56;
+  color: #fff;
+}
+.rv-no.is-on {
+  background: #8a8983;
+  border-color: #8a8983;
+  color: #fff;
+}
+
+.rv-score {
+  width: 68px;
+  font: inherit;
+  font-size: 12.5px;
+  padding: 5px 6px;
+  border: 1px solid #d8d5cc;
+  border-radius: 7px;
+  text-align: right;
+  color: #23231f;
+  background: #fff;
+}
+.rv-score:focus {
+  outline: 2px solid #7fb2e6;
+  outline-offset: -1px;
+}
+.rv-score::placeholder {
+  color: #c3c1b8;
+}
+
+.rv-empty {
+  margin: 0;
+  padding: 26px 16px;
+  text-align: center;
+  color: #8a8983;
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+/* 提示条 */
+.review-note {
+  margin: 12px 0 0;
+  padding: 9px 12px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+.review-note[hidden] {
+  display: none;
+}
+.review-note.is-ok {
+  background: #e4f0ec;
+  border: 1px solid #c9e0d8;
+  color: #14453c;
+}
+.review-note.is-err {
+  background: #fdf0f0;
+  border: 1px solid #f0d0d0;
+  color: #8a2f22;
+}
+
+/* 底部按钮 */
+.review-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+.review-actions[hidden] {
+  display: none;
+}
+
+.review-keys {
+  margin: 12px 0 0;
+  font-size: 11.5px;
+  color: #a3a199;
+  line-height: 2;
+}
+.review-keys kbd {
+  display: inline-block;
+  padding: 1px 5px;
+  margin: 0 1px;
+  border: 1px solid #dcd9d0;
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: #faf9f6;
+  font-family: inherit;
+  font-size: 11px;
+  color: #5f5e5a;
+}
+
+@media (max-width: 560px) {
+  .review-panel {
+    padding: 14px;
+  }
+  .review-bar {
+    gap: 16px;
+  }
+  .rv-stat b {
+    font-size: 18px;
+  }
+  .rv-row {
+    gap: 8px;
+  }
+  .rv-btns {
+    width: 100%;
+  }
+  .rv-score {
+    flex: 1;
+  }
+}

@@ -361,13 +361,18 @@ function clearLiveValidation(formId) {
 
 function buildCourseRecord(input) {
   const hasScore = input.score !== null && input.score !== undefined;
+  const term = input.term === null || input.term === undefined ? "" : String(input.term).trim();
   return {
     id: makeId(),
     name: (input.name || "").trim(),
     credits: input.credits,
     categoryId: input.categoryId,
     status: input.status,
-    score: (input.status === "done" && hasScore) ? input.score : null
+    score: (input.status === "done" && hasScore) ? input.score : null,
+    // 推荐修读学期（Day 26）：培养方案里写着「第5学期」这类信息。
+    // 「凭记忆确认已修」的清单页靠它帮你回想时间线，所以必须存下来。
+    // 手动录入的课没有这个值，留空字符串即可。
+    term: term.slice(0, 20)
   };
 }
 
@@ -2117,11 +2122,12 @@ function importPlanItems(items) {
     if (!catId) unclassified.push(name);
 
     const result = addCourse(state, {
-      name: name,
+    name: name,
       credits: Number(it.credits),
       categoryId: catId,
       status: "planned",          // 导入的课默认算「计划修」，用户改成「已修」
-      score: null
+      score: null,
+      term: it.term || ""         // 培养方案里的推荐修读学期，留着给清单页用
     });
     if (result.ok) {
       state = result.data;
@@ -2173,6 +2179,142 @@ function listCategories() {
 // 导入前查重：告诉用户哪些已经在列表里了
 function listExistingCourseNames() {
   return state.courses.map(function (c) { return c.name; });
+}
+
+// ---------------------------------------------------------------------------
+// 十、凭记忆确认已修（Day 26）
+//
+// 场景：新生刚导入培养方案，99 门课全是「计划修」，
+// 但他其实记得自己已经修过其中三四十门，只是不知道是哪几门。
+// 如果让他回课程列表一门门找，等于又做了一遍导入时省下的事。
+//
+// 所以做成一个独立的清单页：凭记忆点过去，一路确认。
+//
+// 【三条设计取舍，写在这里免得以后被改回去】
+// 1) 默认全部是「还没决定」，不是「已修」。
+//    万一只是打开看看，手抖点错了还能立刻重来；
+//    反过来默认全标已修的话，一不小心就全标上去了，且看不出原来是什么状态。
+// 2) 页面本身不写任何数据，只有点「完成」才落盘。
+//    中途关掉、刷新、误按 Esc 都不影响已有数据。
+// 3) 标成「已修」的课允许没成绩 —— 这时会算进已修学分但不算 GPA，
+//    这是如实反映「你确实修完了但没录成绩」，不是 bug。
+// ---------------------------------------------------------------------------
+
+// 清单页要显示的课程：只列「计划修」的（已修的已经确定，不用再回忆）
+// 默认按推荐学期排序，没学期的排最后 —— 凭记忆回想时，时间线比板块更好用。
+function listForReview() {
+  const planned = state.courses.filter(function (c) { return c.status === "planned"; });
+
+  function termKey(c) {
+    const t = String(c.term || "");
+    if (!t) return Number.MAX_SAFE_INTEGER;
+    // 「3,4学期」「第3,4学期」这类多学期写法，取最小的那个学期数
+    const nums = t.match(/\d+/g);
+    return nums ? Number(nums[0]) : Number.MAX_SAFE_INTEGER;
+  }
+
+  const sorted = planned.slice().sort(function (a, b) {
+    const ka = termKey(a);
+    const kb = termKey(b);
+    if (ka !== kb) return ka - kb;
+    return a.credits - b.credits;      // 同学期里先看学分小的，先把小额的门清掉
+  });
+
+  return sorted.map(function (c) {
+    return {
+      id: c.id,
+      name: c.name,
+      credits: c.credits,
+      term: c.term || "",
+      categoryName: categoryNameOf(state, c.categoryId) || "未归板块"
+    };
+  });
+}
+
+// 应用清单页的确认结果
+// 入参 marks：[{ id, isDone: true/false, score: number|null }]
+//   isDone=true  → 改成「已修」，score 有值就一起写
+//   isDone=false → 明确「没修过」，保持「计划修」（顺便把成绩清掉，避免脏数据）
+// 没出现在 marks 里的课一律不动。
+function applyReviewMarks(marks) {
+  if (mockMode) {
+    return { ok: false, message: "示例数据模式下不能改。请先点「清除示例」回到你自己的数据。" };
+  }
+  if (!Array.isArray(marks)) {
+    return { ok: false, message: "数据格式不对。" };
+  }
+
+  let markedDone = 0;
+  let markedPlanned = 0;
+  const notFound = [];
+  const invalid = [];
+
+  let next = cloneData(state);
+  for (const m of marks) {
+    const index = next.courses.findIndex(function (c) { return c.id === m.id; });
+    if (index === -1) {
+      notFound.push(m.id);
+      continue;
+    }
+    const course = next.courses[index];
+
+    if (m.isDone) {
+      let score = null;
+      if (m.score !== null && m.score !== undefined && m.score !== "") {
+        const n = Number(m.score);
+        if (isNaN(n) || n < 0 || n > 100 || Math.round(n) !== n) {
+          invalid.push(course.name + "（成绩需为 0–100 的整数）");
+          continue;
+        }
+        score = n;
+      }
+      course.status = "done";
+      course.score = score;
+      markedDone++;
+    } else {
+      course.status = "planned";
+      course.score = null;
+      markedPlanned++;
+    }
+  }
+
+  if (markedDone === 0 && markedPlanned === 0) {
+    return {
+      ok: false,
+      message: invalid.length
+        ? "成绩填写有误，什么都没改：" + invalid.slice(0, 3).join("、")
+        : "没有确认任何课程，数据没有变化。"
+    };
+  }
+
+  state = next;
+  persist();
+  renderAll();
+
+  let message = "已把 " + markedDone + " 门课标记为已修。";
+  if (markedPlanned) message += markedPlanned + " 门保持计划修。";
+
+  const noScore = state.courses.filter(function (c) {
+    return c.status === "done" && (c.score === null || c.score === undefined);
+  }).length;
+  if (noScore > 0) {
+    message += "其中 " + noScore + " 门没填成绩，已修学分会计入，但 GPA / 平均分暂时算不出来（这是正常的，成绩可以之后补）。";
+  }
+  if (invalid.length) {
+    message += " 有 " + invalid.length + " 门因为成绩填错没改成：" + invalid.slice(0, 3).join("、");
+  }
+  if (notFound.length) {
+    message += " 有 " + notFound.length + " 门在列表里找不到了（可能已被删除）。";
+  }
+
+  return {
+    ok: true,
+    markedDone: markedDone,
+    markedPlanned: markedPlanned,
+    noScore: noScore,
+    invalid: invalid,
+    message: message
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -2602,6 +2744,9 @@ window.CreditApp = {
   importPlanItems: importPlanItems,
   listCategories: listCategories,
   listExistingCourseNames: listExistingCourseNames,
+  listForReview: listForReview,
+  applyReviewMarks: applyReviewMarks,
+  isMockMode: function () { return mockMode; },
   MOCK_DATA: MOCK_DATA,
   MOCK_DATA_2: MOCK_DATA_2
 };

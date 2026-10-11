@@ -1370,3 +1370,82 @@ select:disabled {
   border-color: #f0d0d0;
   color: #8a2f22;
 }
+
+/* ---------------------------------------------------------------------------
+   培养方案对账（Day 26）
+   三个数分清楚：方案要求 / 全部课程可选 / 已修 / 还差
+   --------------------------------------------------------------------------- */
+
+.plan-reconcile {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #e2e0d8;
+}
+.plan-reconcile[hidden] {
+  display: none;
+}
+
+.plan-reconcile h3 {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: #23231f;
+  margin: 0 0 6px;
+}
+
+.plan-reconcile .hint {
+  font-size: 12px;
+  color: #8a8983;
+  margin: 0 0 12px;
+  line-height: 1.6;
+}
+
+.plan-numbers {
+  display: flex;
+  gap: 28px;
+  flex-wrap: wrap;
+}
+
+.plan-numbers > div {
+  min-width: 84px;
+}
+
+.pn-label {
+  display: block;
+  font-size: 12px;
+  color: #8a8983;
+  margin-bottom: 2px;
+}
+
+.plan-numbers b {
+  font-size: 22px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+
+/* 方案要求 = 权威数字，用蓝色 */
+.pn-req { color: #185fa5; }
+/* 可选 = 中性偏灰，因为它是「有多少可选」不是「要修多少」 */
+.pn-pick { color: #8a8983; }
+/* 已修 = 完成，绿色 */
+.pn-done { color: #0f6e56; }
+/* 还差 = 警示，橙 */
+.pn-remain { color: #9a6a12; }
+/* 已达标 = 绿 */
+.pn-clear { color: #0f6e56; }
+
+.plan-note {
+  margin: 14px 0 0;
+  font-size: 12.5px;
+  color: #5f5e5a;
+  line-height: 1.6;
+}
+
+@media (max-width: 520px) {
+  .plan-numbers {
+    gap: 18px;
+  }
+  .plan-numbers b {
+    font-size: 19px;
+  }
+}

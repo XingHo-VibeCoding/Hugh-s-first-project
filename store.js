@@ -1,6 +1,10 @@
 // 学分规划助手 —— 本机存储读写封装（Day 7 步骤 2）
 // 说明：一期没有服务器与数据库，数据全部存在用户自己的浏览器里。
 // 存储结构见 TECH_DESIGN.md 第四节：{ version, categories: [], courses: [] }
+//
+// Day 26 新增 plan 字段（培养方案信息），用于总学分对账：
+//   { sourceName: 文件名, totalRequired: 培养方案写的总学分, importedAt: 时间戳 }
+// 老数据没有这个字段，normalizeData 会补一个空对象，所以旧数据照样能读。
 
 const STORAGE_KEY = "creditPlanner.v1";
 const STORAGE_VERSION = 1;
@@ -11,17 +15,28 @@ function emptyData() {
   return {
     version: STORAGE_VERSION,
     categories: [],
-    courses: []
+    courses: [],
+    plan: null
   };
 }
 
 // 把任意输入补齐成合法结构（缺字段、类型不对时自动兜底）
 function normalizeData(input) {
   const src = (input && typeof input === "object") ? input : {};
+  // plan 是后加的字段，老数据没有 → 补 null，读取方判空即可
+  const plan = (src.plan && typeof src.plan === "object")
+    ? {
+        sourceName: typeof src.plan.sourceName === "string" ? src.plan.sourceName : "",
+        totalRequired: (typeof src.plan.totalRequired === "number" && isFinite(src.plan.totalRequired))
+          ? src.plan.totalRequired : null,
+        importedAt: typeof src.plan.importedAt === "string" ? src.plan.importedAt : ""
+      }
+    : null;
   return {
     version: STORAGE_VERSION,
     categories: Array.isArray(src.categories) ? src.categories : [],
-    courses: Array.isArray(src.courses) ? src.courses : []
+    courses: Array.isArray(src.courses) ? src.courses : [],
+    plan: plan
   };
 }
 

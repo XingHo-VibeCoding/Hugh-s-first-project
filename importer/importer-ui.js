@@ -62,6 +62,7 @@
   let items = [];        // 解析出的课程
   let categories = [];   // 网站现有板块
   let existingNames = [];// 已有课程名，用于标重复
+  let planInfo = null;  // 培养方案的总要求学分与文件名，导入后交给 app.js 存起来
 
   function parseFile(file) {
     ensureLibs().then(function () {
@@ -88,14 +89,24 @@
         }
         categories = (window.CreditApp.listCategories() || []);
         existingNames = (window.CreditApp.listExistingCourseNames() || []);
+        // 培养方案原文写的总要求学分（「修满第一课堂 148.5 学分」），
+   // 导入后存下来，概览页就能说清「还差多少」。
+        // 用全文找：这句话在第 3 页正文里，不在课程表矩阵里。
+    const declared = window.CourseExtractor.findDeclaredTotal(res.text);
+        planInfo = { sourceName: file.name, totalRequired: declared };
         items = ex.rows.map(function (r) {
           return {
-            name: r.name,
-            credits: r.credits,
-            term: r.term || "",
-            section: r.section || "",
-            picked: true,
-            dup: existingNames.indexOf(r.name) !== -1
+    name: r.name,
+    credits: r.credits,
+    term: r.term || "",
+         section: r.section || "",
+        // 板块要求学分：优先用这条课程带的，
+      // 没有就从解析出的板块要求表里查（同板块的要求是一样的）
+            sectionRequired: (r.sectionRequired !== null && r.sectionRequired !== undefined)
+  ? r.sectionRequired
+       : (ex.sections.find(function (s) { return s.name === r.section; }) || {}).required || null,
+      picked: true,
+    dup: existingNames.indexOf(r.name) !== -1
           };
         });
         renderTable();
@@ -243,7 +254,17 @@
       return;
     }
     const result = window.CreditApp.importPlanItems(ok.map(function (it) {
-      return { name: it.name.trim(), credits: it.credits, section: it.section, term: it.term };
+      return {
+    name: it.name.trim(),
+        credits: it.credits,
+    section: it.section,
+        // 培养方案原文写的板块要求学分，交给 app.js 填进新板块
+sectionRequired: it.sectionRequired,
+        // 培养方案的总要求学分（「修满第一课堂 148.5 学分」）
+        planTotalRequired: planInfo ? planInfo.totalRequired : null,
+        planSourceName: planInfo ? planInfo.sourceName : "",
+        term: it.term
+      };
     }));
 
     if (!result.ok) {

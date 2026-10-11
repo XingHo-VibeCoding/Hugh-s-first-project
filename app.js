@@ -16,7 +16,9 @@ function cloneData(data) {
   return {
     version: data.version,
     categories: data.categories.map(function (c) { return Object.assign({}, c); }),
-    courses: data.courses.map(function (c) { return Object.assign({}, c); })
+    courses: data.courses.map(function (c) { return Object.assign({}, c); }),
+    // plan 是培养方案信息（Day 26），没有就补 null
+    plan: data.plan ? Object.assign({}, data.plan) : null
   };
 }
 
@@ -1702,6 +1704,64 @@ function renderGpa() {
   if (counts) {
     counts.textContent = state.categories.length + " 个板块 / " + state.courses.length + " 门课程";
   }
+
+  renderPlanReconcile(overall);
+}
+
+// ---------------------------------------------------------------------------
+// 培养方案对账（Day 26）
+// ---------------------------------------------------------------------------
+// 三个数容易混在一起说不清，所以这里分开列：
+//   方案要求  培养方案原文写的「毕业要修够多少学分」
+//   可选      培养方案列出的所有课程加起来（你只要挑一部分修）
+//   已修      你实际修完的（默认导入的都是「计划修」，所以刚导入时是 0）
+//
+// 「可选」必然大于「要求」，因为培养方案列的是所有可以修的课。
+// 这个差不是错误，不说清楚会让人以为漏了课。
+function renderPlanReconcile(overall) {
+  const box = document.getElementById("plan-reconcile");
+  if (!box) return;
+
+  const plan = state.plan;
+  if (!plan || !plan.totalRequired) {
+    box.hidden = true;
+    return;
+  }
+  box.hidden = false;
+
+  const required = Number(plan.totalRequired);
+  const picked = state.courses.reduce(function (sum, c) { return sum + (Number(c.credits) || 0); }, 0);
+  const done = overall.totalCredits;
+  const remain = Math.max(required - done, 0);
+
+  const hint = document.getElementById("plan-reconcile-hint");
+  if (hint) {
+    hint.textContent = "依据「" + (plan.sourceName || "导入的培养方案") +
+   "」写明的毕业要求学分。培养方案列的是所有可以修的课，实际只要挑够要求的学分。";
+  }
+
+  const numbers = document.getElementById("plan-numbers");
+  if (numbers) {
+    numbers.innerHTML =
+      '<div><span class="pn-label">方案要求</span><b class="pn-req">' + formatNumber(required) + "</b></div>" +
+      '<div><span class="pn-label">全部课程可选</span><b class="pn-pick">' + formatNumber(picked) + "</b></div>" +
+      '<div><span class="pn-label">已修</span><b class="pn-done">' + formatNumber(done) + "</b></div>" +
+      '<div><span class="pn-label">还差</span><b class="' +
+      (remain > 0 ? "pn-remain" : "pn-clear") + '">' + formatNumber(remain) + "</b></div>";
+  }
+
+  const note = document.getElementById("plan-note");
+  if (note) {
+    if (done === 0) {
+      note.textContent = "已修 0 分：导入的课都记为「计划修」。" +
+    "把修完的课状态改成「已修」，这里就会算出你还差多少。";
+    } else if (remain > 0) {
+      note.textContent = "距离毕业要求还差 " + formatNumber(remain) + " 分。" +
+    "可选学分是够的，重点看下面各板块分别还差多少。";
+    } else {
+      note.textContent = "已达到毕业要求学分，恭喜。";
+    }
+  }
 }
 
 // ---- 板块④：决策板块 ----
@@ -1987,12 +2047,22 @@ function findCategoryIdByName(categories, name) {
 }
 
 // 先按解析出来的板块名建板块；已存在的直接复用
-function ensureCategories(data, sectionNames) {
+// sectionMeta 是 [{name, required}] —— 培养方案原文写的「要求学分」，
+// 建板块时一并填上，这样「还差多少学分」一建好就是准的，
+// 不用用户再手动去查培养方案抄数字。
+function ensureCategories(data, sectionMeta) {
   const created = [];
-  const names = Array.from(new Set(sectionNames.filter(Boolean)));
-  for (const name of names) {
+  const metas = Array.isArray(sectionMeta) ? sectionMeta : [];
+  for (const meta of metas) {
+    const name = typeof meta === "string" ? meta : meta.name;
+    if (!name) continue;
+    const required = typeof meta === "string" ? null : meta.required;
     if (findCategoryIdByName(data.categories, name)) continue;
-    const result = addCategory(data, { name: name, requiredCredits: null, note: "由培养方案导入自动创建" });
+    const result = addCategory(data, {
+      name: name,
+      requiredCredits: (required === null || required === undefined) ? null : Number(required),
+      note: "由培养方案导入自动创建"
+    });
     if (result.ok) {
       data = result.data;
       created.push(result.data.categories[result.data.categories.length - 1].name);
@@ -2013,9 +2083,23 @@ function importPlanItems(items) {
   const skipped = [];
   const unclassified = [];
 
-  // 先把用到的板块建出来
-  const sectionNames = items.map(function (it) { return it.section; });
-  const ensured = ensureCategories(state, sectionNames);
+  // 先把用到的板块建出来，并把培养方案原文的「要求学分」一起填进去。
+  // 每条课程可以带 sectionRequired；同名板块取第一个非空值。
+  const requiredBySection = {};
+  for (const it of items) {
+    if (!it.section) continue;
+    if (it.sectionRequired === null || it.sectionRequired === undefined) continue;
+    // 同一板块可能有多条课程，各自带的要求学分不同：
+    //   通识教育的课分别带 3.5 / 8 / 1（课程类别列里的细分小组）
+    // 而「课程模块」列写的是整个模块的总要求 50.5。
+    // 取最大值 —— 模块的总要求才是这个板块真正要修够的数。
+    requiredBySection[it.section] = Math.max(requiredBySection[it.section] || 0, Number(it.sectionRequired));
+  }
+  const usedNames = Array.from(new Set(items.map(function (it) { return it.section; }).filter(Boolean)));
+  const sectionMeta = usedNames.map(function (name) {
+    return { name: name, required: requiredBySection[name] };
+  });
+  const ensured = ensureCategories(state, sectionMeta);
   state = ensured.data;
 
   for (const it of items) {
@@ -2047,7 +2131,17 @@ function importPlanItems(items) {
     }
   }
 
+  // 把培养方案的总要求学分记下来，供概览页对账。
+  // totalRequired 就是文档原文写的那个数（这份是天文学 148.5），
+  // 它是「毕业要修够多少」，跟「你目前选了多少门课」不是一回事，
+  // 有它才能说清「还差多少」。
   if (added > 0) {
+    const totalReq = Number(items[0] && items[0].planTotalRequired);
+    state.plan = {
+      sourceName: (items[0] && items[0].planSourceName) || "",
+      totalRequired: (isFinite(totalReq) && totalReq > 0) ? totalReq : null,
+      importedAt: new Date().toISOString()
+    };
     persist();
     renderAll();
   }
@@ -2055,6 +2149,9 @@ function importPlanItems(items) {
   let message = "已导入 " + added + " 门课程。";
   if (skipped.length) message += " 跳过 " + skipped.length + " 门（已存在或数据不合法）。";
   if (unclassified.length) message += " 其中 " + unclassified.length + " 门没归到板块，需要你手动选。";
+  // 说明「已修 0 分」不是出错：培养方案列的是「可以修的课」，
+  // 不是「你已经修过的课」。默认全记为计划修，用户自己改成已修。
+  message += "这些课都记为「计划修」，修过的改成「已修」后概览才会算进已修学分。";
 
   return {
     ok: true,

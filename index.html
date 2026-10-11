@@ -139,15 +139,22 @@
           </div>
         </dl>
 
-        <div class="rule-row">
-          <label for="gpa-rule">GPA 换算规则</label>
-          <select id="gpa-rule">
-            <option value="4.0">4.0 制（常见）</option>
-            <option value="5.0">5.0 制</option>
-            <option value="grade">等级制（优 / 良 / 中 / 及格）</option>
-          </select>
-          <span class="rule-note">换算规则各校不同，以本校教务处规定为准。</span>
-        </div>
+<div class="rule-row">
+        <label for="gpa-rule">GPA 换算规则</label>
+        <select id="gpa-rule">
+   <option value="4.0">4.0 制（常见）</option>
+      <option value="5.0">5.0 制</option>
+ <option value="grade">等级制（优 / 良 / 中 / 及格）</option>
+        </select>
+        <span class="rule-note">换算规则各校不同，以本校教务处规定为准。</span>
+      </div>
+
+      <div class="plan-reconcile" id="plan-reconcile" hidden>
+        <h3>培养方案对账</h3>
+      <p class="hint" id="plan-reconcile-hint"></p>
+   <div class="plan-numbers" id="plan-numbers"></div>
+        <p class="plan-note" id="plan-note"></p>
+      </div>
       </section>
 
       <section class="panel" id="panel-decision">

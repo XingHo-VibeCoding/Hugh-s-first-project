@@ -49,6 +49,11 @@
 var PDFReader = (function () {
   "use strict";
 
+  // 本类 PDF 的标准行高（实测约 10.8）。
+  // 「同一个单元格内折行」的行距就是一个行高，
+  // 所以凡是判断「这两段文字是不是一行的」都以此为基准。
+  var LINE_H = 11;
+
   var ROW_TOLERANCE = 3.0;    // 一行之内 y 的最大抖动
   var COL_GAP = 6.0;      // 同行内切开两列的最小 x 间隔
 
@@ -242,7 +247,6 @@ var PDFReader = (function () {
       // 同一个单元格内折行，行距就是一个行高（实测约 10~11）；
       // 两门独立课程之间还隔着学分行、课程号行，距离明显更大。
       // 所以：只接 y 相差在 1.4 个行高以内的行。
-var LINE_H = 11;
       var MAX_TAIL_DIST = LINE_H * 1.4;
       // 上下两个方向都要接
       var offsets2 = [-1, 1, -2, 2, -3, 3];
@@ -315,8 +319,8 @@ var LINE_H = 11;
         var m = ci.module >= 0 ? (g.cells[ci.module] || "") : "";
         var c = ci.category >= 0 ? (g.cells[ci.category] || "") : "";
         if (!m && !c) continue;
-        CAT_EVENTS.push({
-          pageNo: pd.pageNo, gridIndex: gi, module: m, category: c
+CAT_EVENTS.push({
+    pageNo: pd.pageNo, gridIndex: gi, y: g.y, module: m, category: c
         });
    }
     });
@@ -337,19 +341,35 @@ var LINE_H = 11;
     // 所以两列必须各自独立合并。
     //
     // 判据：同列相邻碎片行 gridIndex 相差 <= 2（再宽就会把两个分组混起来）。
+    // 把同一个单元格内的碎片合并。
+    //
+    // 【为什么不能用「gridIndex 相差 <= 2」】
+    // 分类文字折行后，同一个分组会占好几行；但**相邻两个分组之间也只隔 1~2 行**
+    // （中间是表格线的空白）。用 <= 2 会把两三个分组的碎片串成：
+    //   「专业选修课程（天体物理与理论方向）(要求学分:0-18）
+    //     专业选修课程（天文数据处理方向）(要求学分:0-11）
+    //     专业选修课程（天文实验与实践方向）(要求学分:0-11）」
+    // 于是所有课都被判成第一个方向，方向拆分就失效了。
+    //
+    // 正确判据是 **y 距离**：同一个单元格内折行，行距就是一个行高（约 11）。
+    // 相邻分组之间还隔着课程行，距离明显更大。
     function mergeFragments(key) {
       var out = [];
       CAT_EVENTS.forEach(function (ev) {
         var frag = ev[key];
         if (!frag) return;
         var last = out[out.length - 1];
-        if (last && last.pageNo === ev.pageNo && ev.gridIndex - last.lastIndex <= 2) {
+        // y 相差在 1.5 个行高内 = 同一个单元格的折行碎片
+        var sameCell = last &&
+          last.pageNo === ev.pageNo &&
+          Math.abs(ev.y - last.lastY) <= LINE_H * 1.5;
+        if (sameCell) {
           last.text += frag;
-          last.lastIndex = ev.gridIndex;
+          last.lastY = ev.y;
         } else {
           out.push({
-            pageNo: ev.pageNo, gridIndex: ev.gridIndex, lastIndex: ev.gridIndex,
-            text: frag
+            pageNo: ev.pageNo, gridIndex: ev.gridIndex,
+            lastY: ev.y, text: frag
           });
         }
       });
@@ -434,20 +454,32 @@ var LINE_H = 11;
                   width: it.width || 0
                 });
               }
-              pages.push({
-                pageNo: pageNo,
-                // 【关键】y 必须一起带上，下游全靠它
-                rows: groupIntoRows(items).map(function (r) {
-                  return { y: r.y, cells: rowToCells(r.items) };
-                })
+pages.push({
+       pageNo: pageNo,
+       // 全文（含表头之前的段落）——
+       // 「毕业要求修满第一课堂 148.5 学分」这类关键信息在第 3 页的正文里，
+    // 不在课程表里，所以要单独留一份给对账用
+       text: items.map(function (it) { return it.text; }).join(""),
+           // 【关键】y 必须一起带上，下游全靠它
+      rows: groupIntoRows(items).map(function (r) {
+    return { y: r.y, cells: rowToCells(r.items) };
+      })
               });
             });
           })(p);
         }
 
-        return chain.then(function () {
+return chain.then(function () {
           var out = reflow(pages);
-          return { matrix: out.matrix, header: out.header, pages: pageCount };
+    // 全文：表头之前的段落里常有毕业要求（总学分）这类信息，
+          // 课程表里没有，所以单独返回给对账用
+          var fullText = pages.map(function (pg) { return pg.text || ""; }).join("");
+          return {
+            matrix: out.matrix,
+            header: out.header,
+            text: fullText,
+            pages: pageCount
+          };
         });
       });
   }

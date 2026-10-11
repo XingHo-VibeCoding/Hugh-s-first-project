@@ -13,14 +13,28 @@
 var ExtractorCore = (function () {
   "use strict";
 
-  // 板块识别分两级：
-//   1）严格匹配 —— 认「专业核心课程」「学科基础必修课程」这种完整名字
-//   2）宽松匹配 —— 认「学科基础」「专业核心」这类简称，只在没有严格匹配时用
-// 【为什么分开】
-// 分类文字会折行，累积出来的碎片可能是「学分:50.5）」这种半截，
-// 宽松规则一旦先命中「通识」，后面所有课程都会被误判成通识教育。
-// 所以必须先跑完所有严格规则，都不中才用宽松的。
+// 「课程类别」列 / 「课程模块」列里出现的分类名 → 我们网站里的板块名
+  //
+  // 顺序很重要：从最具体到最宽泛。
+  // 实测云南大学 PDF 的两列内容：
+  //   课程模块列：通识教育 / 专业教育 / 拓展教育 / （大类）学科基础   ← 大类，太宽泛
+  //   课程类别列：通识教育必修课程组（一）/ 专业核心课程 / 拓展教育课程← 精确
+  // 所以先用「课程类别」列的精确名，它认不出时才退到模块列的大类。
+  //
+  // 【专业选修要按方向拆开】
+  // 培养方案里专业选修分三个方向，只修一个：
+  //   专业选修课程（天体物理与理论方向）(要求学分:0-18）
+  //   专业选修课程（天文数据处理方向）(要求学分:0-11）
+  //   专业选修课程（天文实验与实践方向）(要求学分:0-11）
+  // 合在一起算永远算不清「我还差多少」，所以这里把方向名提出来，
+  // 单独成为板块名。注意「要求学分:0-18」是范围不是定值，
+  // 提取时只取上限。
   var STRICT_MAP = [
+    // —— 专业选修的三个方向，必须排在「专业选修课程」前面 ——
+    { name: "专业选修（天文物理与理论）", words: ["专业选修课程（天体物理与理论方向", "专业选修课程（天体物理与理论", "（天体物理与理论方向"] },
+    { name: "专业选修（天文数据处理）", words: ["专业选修课程（天文数据处理方向", "专业选修课程（天文数据处理", "（天文数据处理方向"] },
+    { name: "专业选修（天文实验与实践）", words: ["专业选修课程（天文实验与实践方向", "专业选修课程（天文实验与实践", "（天文实验与实践方向"] },
+    // —— 其他精确名 ——
     { name: "专业核心课程", words: ["专业核心课程"] },
     { name: "学科基础课程", words: ["学科基础必修课程", "学科基础选修课程"] },
     { name: "拓展教育课程", words: ["拓展教育课程"] },
@@ -118,8 +132,23 @@ var ExtractorCore = (function () {
   // 从文字里认出板块名（旧定义已合并到上面的 matchStrict/matchLoose）
 
   // 抽「要求学分:27」里的数字
+  // 抽「要求学分」里的数字
+  //
+  // 【注意范围写法】实测专业选修的方向课写的是「(要求学分:0-18）」
+  // 意思是「0 到 18 之间任修」，不是「要修 0 分」。
+  // 所以遇到「a-b」形式要取上限 b，否则会算出 0 分，板块要求就成了空。
   function parseRequiredCredits(text) {
     if (!text) return null;
+
+    // 范围写法：0-18 / 0－18 / 0~18
+    var range = String(text).match(/要求学分\s*[:：]?\s*([\d.]+)\s*[-－~至]\s*([\d.]+)/);
+    if (range) {
+      var hi = Number(range[2]);
+      if (isFinite(hi) && hi > 0) return hi;
+      return null;
+    }
+
+    // 定值写法
     var m = String(text).match(/要求学分\s*[:：]?\s*([\d.]+)/);
     if (m) {
       var n = Number(m[1]);
@@ -165,6 +194,9 @@ var ExtractorCore = (function () {
 
     var currentSection = null;
     var sections = {};
+    // 板块名 → 要求学分。跟着每一行同步维护，
+    // 这样每门课都能带上自己板块的要求学分。
+    var requiredByName = {};
 
     for (var i = headerIdx + 1; i < matrix.length; i++) {
       var row = matrix[i] || [];
@@ -176,10 +208,14 @@ var ExtractorCore = (function () {
       var section = matchCategory(categoryName) || matchCategory(moduleName);
 
       // 板块要求学分可能写在模块或类别列里，形如「专业核心课程(要求学分:27）」
-      [moduleName, categoryName].forEach(function (t) {
+      // 或者方向课的范围写法「(要求学分:0-18）」
+    [moduleName, categoryName].forEach(function (t) {
         var req = parseRequiredCredits(t);
         var secName = matchCategory(t);
-        if (req !== null && secName) sections[secName] = Math.max(sections[secName] || 0, req);
+        if (req !== null && secName) {
+          sections[secName] = Math.max(sections[secName] || 0, req);
+      requiredByName[secName] = Math.max(requiredByName[secName] || 0, req);
+      }
       });
 
       if (section) currentSection = section;
@@ -192,11 +228,14 @@ var ExtractorCore = (function () {
         continue;
       }
 
-      rows.push({
-        name: name,
+rows.push({
+  name: name,
         credits: credit,
         section: section || currentSection || null,
-        term: cellOf(row, colMap.term) || null,
+     // 培养方案原文写的这个板块「要求学分」，跟着课程一起带出去，
+        // 导入时用来填板块的要求，省得用户再抄一遍
+        sectionRequired: requiredByName[section || currentSection] || null,
+      term: cellOf(row, colMap.term) || null,
         code: cellOf(row, colMap.code) || null,
         raw: row.map(function (c) { return c && c.text ? c.text : ""; })
       });
@@ -214,17 +253,36 @@ var ExtractorCore = (function () {
     };
   }
 
-  // 从正文找文档声明的总学分，用于对账
-  function findDeclaredTotal(text) {
-    if (!text) return null;
+// 从全文或矩阵里找文档声明的总学分，用于对账
+  //
+  // 实测这份培养方案在**第 3 页正文**里写着「修满第一课堂 148.5 学分、第二课堂 6 学分」，
+  // 而课程表从第 4 页才开始 —— 所以只搜矩阵是找不到的，全文必须一起给。
+  function findDeclaredTotal(source) {
+    if (!source) return null;
+    var text;
+    if (typeof source === "string") {
+      text = source;
+    } else if (Array.isArray(source)) {
+      // 矩阵：把所有单元格文字拼起来
+      var parts = [];
+      for (var i = 0; i < source.length; i++) {
+        var row = source[i] || [];
+        for (var j = 0; j < row.length; j++) {
+          if (row[j] && row[j].text) parts.push(row[j].text);
+        }
+      }
+      text = parts.join("");
+    } else {
+      return null;
+    }
     var patterns = [
-      /第一课堂\s*([\d.]+)\s*学分/,
+  /第一课堂\s*([\d.]+)\s*学分/,
       /共需?修满\s*([\d.]+)\s*学分/,
       /修满\s*([\d.]+)\s*学分/,
       /总学分(?:为|是|：|:)?\s*([\d.]+)/
     ];
-    for (var i = 0; i < patterns.length; i++) {
-      var m = text.match(patterns[i]);
+    for (var k = 0; k < patterns.length; k++) {
+      var m = text.match(patterns[k]);
       if (m) {
         var n = Number(m[1]);
         if (isFinite(n) && n > 0 && n < 500) return n;

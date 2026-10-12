@@ -578,6 +578,71 @@ const sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms
   } else { bDetail = "KNOWN_BUGS.md 不存在"; }
   record("⑫", "未修复的 bug 都有记录和优先级", bOK, bDetail, true);
 
+  // ---------------------------------------------------------- ⑬ 云函数 zip 是最新的吗
+  //
+  // ⚠️ Day 27 加这一项的原因（血泪教训）：
+  //
+  //   云函数部署的是 cloudfunctions/api/index.zip，**不是仓库里的 .js 源码**。
+  //   改完源码不重新打包，线上跑的还是老代码 —— **而且没有任何报错**。
+  //
+  //   Day 23–27 我改了云函数 5 次，提交推送写文档全都做了，
+  //   一次都没重新打包。结果线上跑的是 10 月 4 日的版本，整整 5 天。
+  //
+  //   为什么别的地方抓不到它：
+  //   - index.zip 不进 git，所以 `git status` 永远是干净的
+  //   - 部署后接口返回 200，日志里也看不到异常
+  //   唯一能发现的方式是「打一个只有新代码才会正确响应的值」
+  //
+  // 所以这里做两件事：
+  //   ① zip 里的代码有没有落后于源码（比对时间 + 关键特征串）
+  //   ② 打出结论：需要重新打包 / 已是最新的
+  console.log("\n  ⑬ 云函数 zip 是最新的吗");
+  let zOK = false;
+  let zDetail = "index.zip 不存在（还没打包过）";
+  const zipPath = path.join(ROOT, "cloudfunctions", "api", "index.zip");
+  if (fs.existsSync(zipPath)) {
+    const zipStat = fs.statSync(zipPath);
+    // 源码里最新的修改时间
+    let newestSrc = 0;
+    ["index.js", "services", "repositories"].forEach(function (rel) {
+      const p = path.join(ROOT, "cloudfunctions", "api", rel);
+      if (!fs.existsSync(p)) return;
+      if (fs.statSync(p).isDirectory()) {
+        fs.readdirSync(p).forEach(function (f) {
+          if (f.endsWith(".js")) {
+            newestSrc = Math.max(newestSrc, fs.statSync(path.join(p, f)).mtimeMs);
+          }
+        });
+      } else {
+        newestSrc = Math.max(newestSrc, fs.statSync(p).mtimeMs);
+      }
+    });
+
+    // zip 里必须含有的特征串（挑几个"改了就会变"的）
+    const SRC = path.join(ROOT, "cloudfunctions", "api");
+    const srcText = ["index.js", "services/courseService.js", "services/errorResponses.js"]
+      .map(function (f) {
+        try { return fs.readFileSync(path.join(SRC, f), "utf8"); } catch (e) { return ""; }
+      }).join("\n");
+
+    const sig = [];
+    if (/0\.25 的倍数/.test(srcText)) sig.push("0.25 粒度");
+    if (/学分必须是数字/.test(srcText)) sig.push("学分类型校验");
+    if (/MAX_CREDITS/.test(srcText)) sig.push("学分上限");
+    if (/__error/.test(srcText)) sig.push("业务错误分级");
+
+    const stale = newestSrc > zipStat.mtimeMs + 1000;
+    zOK = !stale;
+    zDetail =
+      "zip " + Math.round(zipStat.size / 1024) + " KB（" + new Date(zipStat.mtimeMs).toLocaleString("zh-CN") + "）" +
+      "；源码最新 " + new Date(newestSrc).toLocaleString("zh-CN") +
+      "；特征串 " + sig.length + " 项" +
+      (stale
+        ? "　⚠️ **源码比 zip 新 → 线上跑的是老代码，跑 node scripts/pack-cloudfunction.js 后上传部署**"
+        : "　✅ 看起来是最新的（但仍需上传控制台后才算上线）");
+  }
+  record("⑬", "云函数 zip 与源码同步", zOK, zDetail, true);
+
   // ---------------------------------------------------------- 汇总
   console.log("\n" + "=".repeat(66));
   const passed = results.filter(function (r) { return r.pass; }).length;

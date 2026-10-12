@@ -1,5 +1,5 @@
 -- =============================================================================
--- migrate-credits-025.sql —— 把学分粒度从 0.5 放宽到 0.25（Day 26 B-004）
+-- migrate-credits-025.sql —— 把学分粒度从 0.5 放宽到 0.25（B-004）
 -- =============================================================================
 --
 -- 【为什么需要这个】
@@ -7,10 +7,10 @@
 -- 0.25 学分/学期（这份文档里就有 8 门）。于是把前端 app.js 和云函数
 -- courseService 的校验都放宽到了 0.25。
 --
--- **但数据库表没跟着改**，造成三���不一致：
---   前端     0.25 的整数倍           ✅ 已改
---   云函数    0.25 的整数倍           ✅ 已改
---   数据库   numeric(3,1) + mod(.,0.5) ❌ 没改
+-- **但数据库表没跟着改**，造成三层不一致：
+--   前端     0.25 的整数倍        ✅ 已改
+--   云函数    0.25 的整数倍        ✅ 已改
+--   数据库   numeric(3,1) + mod(·,0.5)=0  ❌ 没改
 --
 -- 后果：0.25 的课能通过前后端所有校验，却在数据库被 CHECK 约束拒掉，
 -- 用户会看到一个「自己完全没做错」的报错。
@@ -19,160 +19,111 @@
 -- 压根没碰云端那条路径。这个漏是"测试全绿但功能实际不可用"，
 -- 比测试失败危险得多。
 --
--- 【怎么用】
--- 1. 先跑第三节的备份表（务必先做）
--- 2. 再跑第二节的迁移
--- 3. 最后跑第四节的验收查询，逐条对得上才算完成
---
--- 本脚本只改 courses 表，categories 表的 required_credits 同理需要放宽
--- （见第二节的 2.3）。
-
 -- =============================================================================
--- 一、执行前必读
+-- ⚠️ 执行方式（Day 27 踩坑后重写，请按 Day 27 的做法执行）
 -- =============================================================================
 --
--- ⚠️ ALTER TABLE 会锁表。当前 courses 表只有测试数据（十几条），
---    锁表时间在毫秒级，可以放心执行。
+-- 【不要直接复制本文件整份到 CloudBase SQL 编辑器】
 --
--- ⚠️ 如果表里已经有 0.25 的数据（理论上不该有，因为 CHECK 会拒），
---    第 2.1 步会失败。看到报错请停下来查，不要跳过备份硬改。
-
--- =============================================================================
--- 二、迁移步骤
--- =============================================================================
-
--- 2.1 放宽学分精度：numeric(3,1) → numeric(3,2)
+-- 第一版这么做过，失败了：文件里的 COMMENT 语句带中文，
+-- 粘贴到 CloudBase 时中文被吞掉，只剩一个孤零零的 `COMMENT ... IS`，
+-- 语法报错 `syntax error at or near "COMMENT"`。
+-- 一报错整批都没执行 —— ALTER 全没生效，数据库还是老样子。
 --
--- numeric(3,2) 的含义：总共 3 位数、其中 2 位小数 → 最大 9.99。
--- ⚠️ 注意精度也变小了（从最大 999.9 变成最大 9.99）。
---    实际课程学分不会超过 20，这个上限绰绰有余。
---    但云函数那边 MAX_CREDITS 也应该同步改成 9.99，两边才一致。
+-- 正确做法：用 `C:\Users\w3224\Desktop\【粘贴到CloudBase】学分迁移-B004-v2.txt`，
+-- 那是**纯 ASCII、无 COMMENT、分段**的版本，
+-- 一段一段粘贴、每段单独执行，出错能立刻定位是哪一条。
 --
--- 已有数据都是 0.5 的倍数，从一位小数变两位小数是安全的（不会丢精度）。
-ALTER TABLE public.courses
-  ALTER COLUMN credits TYPE numeric(3,2);
-
--- 2.2 换掉 CHECK 约束：从 0.5 的倍数改成 0.25 的倍数
---
--- 必须先 DROP 再 ADD：PostgreSQL 不支持直接改 CHECK 约束。
-ALTER TABLE public.courses
-  DROP CONSTRAINT IF EXISTS courses_credits_half;
-
-ALTER TABLE public.courses
-  ADD CONSTRAINT courses_credits_quarter
-  CHECK (credits > 0 AND mod(credits, 0.25) = 0);
-
--- 2.3 板块的「要求学分」同样放宽
---
--- 同一个问题：categories.required_credits 也是 numeric(3,1) + mod(.,0.5)。
--- 页面上板块要求学分同样允许 0.25，所以这里一起改。
-ALTER TABLE public.categories
-  ALTER COLUMN required_credits TYPE numeric(3,2);
-
-ALTER TABLE public.categories
-  DROP CONSTRAINT IF EXISTS categories_required_credits_half;
-
-ALTER TABLE public.categories
-  ADD CONSTRAINT categories_required_credits_quarter
-  CHECK (required_credits IS NULL OR (required_credits > 0 AND mod(required_credits, 0.25) = 0));
-
--- 2.4 更新列注释（不改功能，但让 schema 说明跟实际一致）
-COMMENT ON COLUMN public.courses.credits IS
-  '学分，0.25 的倍数；用 numeric 而非 float，避免 0.1+0.2 类浮点误差';
-
-COMMENT ON COLUMN public.categories.required_credits IS
-  '要求学分；可空表示用户还没填（页面显示"未设置"）；0.25 的倍数';
-
--- =============================================================================
--- 三、备份（务必在第二节之前执行）
--- =============================================================================
---
--- 用 CREATE TABLE AS SELECT 而不是 ALTER TABLE RENAME，
--- 这样原表结构完全不动，出问题随时能切回去。
-
-CREATE TABLE IF NOT EXISTS public.courses_backup_b004 AS
-  SELECT * FROM public.courses;
-
-CREATE TABLE IF NOT EXISTS public.categories_backup_b004 AS
-  SELECT * FROM public.categories;
-
--- 确认备份有数据（应该和原表行数一致）
-SELECT
-  (SELECT count(*) FROM public.courses)AS 原表课程数,
-  (SELECT count(*) FROM public.courses_backup_b004) AS 备份课程数,
-  (SELECT count(*) FROM public.categories)               AS 原表板块数,
-  (SELECT count(*) FROM public.categories_backup_b004)  AS 备份板块数;
-
--- =============================================================================
--- 四、验收（执行完第二节后逐条检查）
+-- 【本文件的作用】留存"改了什么、为什么改"的技术记录，
+-- 供 review 和以后追溯用，不是执行入口。
 -- =============================================================================
 
--- 4.1 列类型应该是 numeric(3,2)
-SELECT
-  table_name, column_name, data_type, numeric_precision, numeric_scale
-FROM information_schema.columns
-WHERE table_schema = 'public'
-  AND table_name IN ('courses', 'categories')
-  AND column_name IN ('credits', 'required_credits')
-ORDER BY table_name, column_name;
--- 期望：data_type = numeric，numeric_precision = 3，numeric_scale = 2
+-- -----------------------------------------------------------------------------
+-- 改动的三件事（等价于 v2 的第 1、2、3 段）
+-- -----------------------------------------------------------------------------
 
--- 4.2 约束应该在，且名字是新名字
-SELECT conname, pg_get_constraintdef(oid) AS 定义
-FROM pg_constraint
-WHERE conrelid IN ('public.courses'::regclass, 'public.categories'::regclass)
-  AND contype = 'c'
-  AND (conname LIKE '%credits%')
-ORDER BY conname;
--- 期望：courses_credits_quarter 和 categories_required_credits_quarter，
---       定义里是 mod(..., 0.25)；旧的 *_half 应该已经不在了
+-- ① 换掉旧的 CHECK 约束（PostgreSQL 不支持直接改 CHECK，只能先删再加）
+--ALTER TABLE public.courses DROP CONSTRAINT IF EXISTS courses_credits_half;
+--ALTER TABLE public.categories DROP CONSTRAINT IF EXISTS categories_required_credits_half;
 
--- 4.3 关键验证：0.25 现在应该能存进去
+-- ② 放宽列精度：numeric(3,1) → numeric(3,2)
 --
--- 这一条是整个迁移的核心目的。用事务跑，测完自动回滚，不留测试数据。
-BEGIN;
-  INSERT INTO public.courses (id, name, credits, status)
-  VALUES ('b004test001', 'B004验证用临时课', 0.25, 'planned');
-  -- 预期：INSERT 0 1（成功）。如果报 check constraint 违规，说明迁移没成功。
-ROLLBACK;
--- ROLLBACK 之后表里不会有这条数据
+--    numeric(3,2) = 3 位总数含 2 位小数 → 最大 9.99。
+--    ⚠️ 精度上限随之变小（原 numeric(3,1) 最大 999.9）。
+--       所以云函数与前端的 MAX_CREDITS 也必须同步改成 9.99，
+--       否则 9.5 学分会「前端过了、云函数过了、数据库拒了」。
+--    已有数据都是 0.5 的倍数，从一位小数扩到两位不会丢精度。
+--ALTER TABLE public.courses ALTER COLUMN credits TYPE numeric(3,2);
+--ALTER TABLE public.categories ALTER COLUMN required_credits TYPE numeric(3,2);
 
--- 4.4 确认 B-004 之前的老数据都还在、且值没变
-SELECT count(*) AS 应有行数, sum(credits) AS 学分合计 FROM public.courses;
--- 对照备份表：
-SELECT count(*) AS 备份行数, sum(credits) AS 备份学分合计
-FROM public.courses_backup_b004;
--- 两行应该完全一致
-
--- 4.5 不该出现的值仍然被拒（确认约束没被改松）
-BEGIN;
-  -- 下面每条都**应该**报 CHECK 违规。如果某条插进去了，说明约束有问题
-  INSERT INTO public.courses (id, name, credits, status) VALUES ('b004bad01', '负学分', -1, 'planned');
-ROLLBACK;
-
-BEGIN;
-  INSERT INTO public.courses (id, name, credits, status) VALUES ('b004bad02', '零学分', 0, 'planned');
-ROLLBACK;
-
-BEGIN;
-  INSERT INTO public.courses (id, name, credits, status) VALUES ('b004bad03', '非粒度', 1.3, 'planned');
-ROLLBACK;
+-- ③ 加新的 CHECK 约束：0.25 的倍数
+--ALTER TABLE public.courses ADD CONSTRAINT courses_credits_quarter CHECK (credits > 0 AND mod(credits, 0.25) = 0);
+--ALTER TABLE public.categories ADD CONSTRAINT categories_required_credits_quarter CHECK (required_credits IS NULL OR (required_credits > 0 AND mod(required_credits, 0.25) = 0));
 
 -- =============================================================================
--- 五、回滚（万一第二节出了问题）
+-- 备份
 -- =============================================================================
 --
--- ALTER COLUMN TYPE 降回 numeric(3,1) 会把 0.25 四舍五入成 0.3，
--- 而 CHECK 又要求 0.5 的倍数 → 降精度后 0.25 的数据会被 CHECK 拒掉。
--- 所以**顺序很重要**：先删约束，再降精度，最后加回旧约束。
+-- ⚠️ 必须在 ①~③ **之前**执行，而且先看一眼行数对不对再往下走。
+-- 用 CREATE TABLE AS SELECT 而不是 ALTER TABLE RENAME —— 原表结构完全不动，
+-- 出问题随时能切回去。
 --
--- BEGIN;
---   ALTER TABLE public.courses DROP CONSTRAINT IF EXISTS courses_credits_quarter;
---   ALTER TABLE public.courses ALTER COLUMN credits TYPE numeric(3,1);
---   ALTER TABLE public.courses ADD CONSTRAINT courses_credits_half
---     CHECK (credits > 0 AND mod(credits, 0.5) = 0);
---   -- 数据层回滚：拿备份覆盖（会丢掉备份之后新增的记录，谨慎）
---   -- TRUNCATE public.courses;
---   -- INSERT INTO public.courses SELECT * FROM public.courses_backup_b004;
--- ROLLBACK;
--- COMMIT;
+-- Day 27 实际执行结果（已核对）：原表 138 门课 / 6 个板块，备份表完全一致。
+--
+--CREATE TABLE IF NOT EXISTS public.courses_backup_b004 AS SELECT * FROM public.courses;
+--CREATE TABLE IF NOT EXISTS public.categories_backup_b004 AS SELECT * FROM public.categories;
+
+-- =============================================================================
+-- 验收（执行完 ①~③ 后逐条检查）
+-- =============================================================================
+
+-- A. 约束名与定义：新约束在、定义里是 0.25；旧约束已消失
+--SELECT conname, pg_get_constraintdef(oid) FROM pg_constraint WHERE conname LIKE '%credits%';
+
+-- B. 列类型：numeric_scale 应该是 2
+--SELECT table_name, column_name, data_type, numeric_precision, numeric_scale
+--  FROM information_schema.columns
+--  WHERE table_schema = 'public'
+--    AND table_name IN ('courses', 'categories')
+--    AND column_name IN ('credits', 'required_credits');
+
+-- C. 核心验证：0.25 现在应该能存进去（跑在事务里，测完自动回滚）
+--BEGIN;
+--  INSERT INTO public.courses (id, name, credits, status)
+--  VALUES ('b004test001', 'B004 test', 0.25, 'planned');
+--ROLLBACK;
+-- 预期 INSERT 0 1。若报 check constraint 违规 → 迁移没成功。
+
+-- D. 确认老数据一个没丢、值也没变
+--SELECT count(*) AS live_rows,  sum(credits) AS live_sum  FROM public.courses;
+--SELECT count(*) AS backup_rows, sum(credits) AS backup_sum FROM public.courses_backup_b004;
+
+-- E. 反向验证：不该出现的值仍然被拒
+--BEGIN; INSERT INTO public.courses (id, name, credits, status) VALUES ('b004bad01', 'neg', -1, 'planned'); ROLLBACK;
+--BEGIN; INSERT INTO public.courses (id, name, credits, status) VALUES ('b004bad02', 'zero', 0, 'planned'); ROLLBACK;
+--BEGIN; INSERT INTO public.courses (id, name, credits, status) VALUES ('b004bad03', 'bad step', 1.3, 'planned'); ROLLBACK;
+-- 三条都**应该**报 CHECK 违规。某条插进去了说明约束被改松了。
+
+-- =============================================================================
+-- 回滚
+-- =============================================================================
+--
+-- ⚠️ 顺序很重要：先删约束，再降精度，最后加回旧约束。
+-- 降精度会把 0.25 四舍五入成 0.3，而旧 CHECK 要求 0.5 的倍数 → 会失败。
+--
+--BEGIN;
+--  ALTER TABLE public.courses DROP CONSTRAINT IF EXISTS courses_credits_quarter;
+--  ALTER TABLE public.courses ALTER COLUMN credits TYPE numeric(3,1);
+--  ALTER TABLE public.courses ADD CONSTRAINT courses_credits_half
+--    CHECK (credits > 0 AND mod(credits, 0.5) = 0);
+--  ALTER TABLE public.categories DROP CONSTRAINT IF EXISTS categories_required_credits_quarter;
+--  ALTER TABLE public.categories ALTER COLUMN required_credits TYPE numeric(3,1);
+--  ALTER TABLE public.categories ADD CONSTRAINT categories_required_credits_half
+--    CHECK (required_credits IS NULL OR (required_credits > 0 AND mod(required_credits, 0.5) = 0));
+--COMMIT;
+
+-- =============================================================================
+-- 清理备份（确认一切正常后，可选）
+-- =============================================================================
+--DROP TABLE IF EXISTS public.courses_backup_b004;
+--DROP TABLE IF EXISTS public.categories_backup_b004;

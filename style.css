@@ -1795,3 +1795,107 @@ body.review-locked {
     flex: 1;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   两个快捷入口（Day 26 追加 · 反馈「按钮太小没找着」）
+
+   改之前的毛病：两个入口都是 .btn-ghost（白底细边框），
+   夹在表单和说明文字之间，视觉上几乎融进背景 ——
+   而它们恰恰是这个页面最省事的功能，最该被看到却最不起眼。
+
+   改法：给它们一个独立的「入口区」，
+   ① 加一句提问式的标题，把「不用手填」这件事说清楚
+   ② 两个按钮都放大，主入口用实心主色，次入口（导入）用描边但加大
+   ③ 主入口带两行文字（做什么 + 什么时候用），一眼知道点下去会怎样
+   --------------------------------------------------------------------------- */
+
+.quick-entries {
+  margin: 20px 0 14px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: #f4f8fc;
+  border: 1px solid #dbe7f2;
+}
+
+.quick-title {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: #185fa5;
+  font-weight: 500;
+}
+
+/* 主入口：实心主色，带两行说明 */
+.btn-entry {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
+  border-radius: 10px;
+  transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.btn-entry-primary {
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  padding: 14px 18px;
+  box-shadow: 0 1px 3px rgba(24, 95, 165, 0.25);
+}
+.btn-entry-primary:hover {
+  background: #124a83;
+  border-color: #124a83;
+  box-shadow: 0 3px 10px rgba(24, 95, 165, 0.3);
+}
+.btn-entry-primary:active {
+  background: #0c3c6b;
+}
+
+.be-main {
+  display: block;
+  font-size: 16px;
+  font-weight: 500;
+  color: #ffffff;
+  line-height: 1.4;
+}
+.be-sub {
+  display: block;
+  margin-top: 3px;
+  font-size: 12.5px;
+  color: rgba(255, 255, 255, 0.82);
+  line-height: 1.5;
+}
+
+/* 导入按钮：比原来的 .btn-ghost 大一档，带边框更醒目 */
+.btn-entry-lg {
+  padding: 12px 22px;
+  font-size: 15px;
+  border-radius: 9px;
+}
+
+/* 入口区里的 details（导入）不再需要虚线分隔，跟上面的按钮并列成一组 */
+.quick-entries .import-zone {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed #cfdcea;
+}
+
+.quick-entries .review-entry {
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+
+@media (max-width: 560px) {
+  .be-main {
+    font-size: 15px;
+  }
+  .be-sub {
+    font-size: 12px;
+  }
+  .btn-entry-lg {
+    padding: 11px 16px;
+    font-size: 14px;
+    width: 100%;
+  }
+}

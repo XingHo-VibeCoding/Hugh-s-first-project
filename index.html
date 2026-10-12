@@ -84,26 +84,28 @@
   <p class="form-error" id="course-error" hidden></p>
         <p class="form-feedback" id="course-feedback" hidden></p>
 
-        <div class="review-entry">
-          <button type="button" class="btn-ghost" id="review-open">凭记忆确认已修的课</button>
-          <span class="import-tip">
-            导入的课都记为「计划修」。这个清单让你按记忆一路点过去，把修过的改成「已修」，
-          可顺手填成绩。默认什么都不改，点「完成」才保存。
-          </span>
-        </div>
+<div class="quick-entries">
+  <p class="quick-title">不用一门门手填？</p>
+       <div class="review-entry">
+            <button type="button" class="btn-entry btn-entry-primary" id="review-open">
+          <span class="be-main">凭记忆确认已修的课</span>
+   <span class="be-sub">导入的课都记为「计划修」，这里可以一路点过去改成「已修」</span>
+            </button>
+      </div>
 
-        <details class="import-zone" id="import-zone">
-  <summary class="import-head">
-  <span class="import-title">从培养方案导入课程</span>
-            <span class="import-tip">支持 PDF / Word。文件只在你自己的浏览器里解析，不会上传。</span>
- </summary>
-          <p class="form-feedback" id="import-status" role="status" aria-live="polite" hidden></p>
+      <details class="import-zone" id="import-zone">
+          <summary class="import-head">
+   <span class="import-title">从培养方案导入课程</span>
+     <span class="import-tip">支持 PDF / Word。文件只在你自己的浏览器里解析，不会上传。</span>
+          </summary>
+        <p class="form-feedback" id="import-status" role="status" aria-live="polite" hidden></p>
     <div class="import-body">
-            <button type="button" class="btn-ghost" id="import-open">选择培养方案文件</button>
-<input type="file" id="import-file" accept=".pdf,.docx,application/pdf" hidden>
+    <button type="button" class="btn btn-entry-lg" id="import-open">选择培养方案文件</button>
+            <input type="file" id="import-file" accept=".pdf,.docx,application/pdf" hidden>
             <div id="import-result"></div>
           </div>
         </details>
+      </div>
 
         <div class="filter-row" id="course-filter">
           <input type="text" id="filter-keyword" placeholder="搜课程关键词" aria-label="按关键词筛选课程">

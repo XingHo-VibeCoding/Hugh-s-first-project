@@ -578,6 +578,7 @@ const sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms
   } else { bDetail = "KNOWN_BUGS.md 不存在"; }
   record("⑫", "未修复的 bug 都有记录和优先级", bOK, bDetail, true);
 
+
   // ---------------------------------------------------------- ⑬ 云函数 zip 是最新的吗
   //
   // ⚠️ Day 27 加这一项的原因（血泪教训）：
@@ -642,6 +643,45 @@ const sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms
         : "　✅ 看起来是最新的（但仍需上传控制台后才算上线）");
   }
   record("⑬", "云函数 zip 与源码同步", zOK, zDetail, true);
+
+  // ---------------------------------------------------------- ⑭ 回滚手册齐不齐
+  //
+  // ⚠️ Day 26 加这一项的原因：
+  //
+  //   Day 26 正式发布 + 真做了回退演练，自检时才发现：
+  //   **演练做了，回滚手册根本没写。**
+  //   演练记录（TEST_LOG）有，但"出事了该按哪几步做"这份东西不存在 ——
+  //   等于真出事时还是得从头想，等于没有手册。
+  //
+  // 为什么别的地方抓不到它：
+  //   - 演练确实做了，TEST_LOG 里时间线齐全，看着挺完整
+  //   - git tag 也在、文件也能取回 —— 备份检测全过，唯独手册没人提
+  //   - 所以它不属于任何已有的检查项，只能新加一项盯着
+  //
+  // 这一项检查三件事（缺一不可）：
+  //   ① 有触发条件     —— 什么情况该回滚、什么情况不该
+  //   ② 有分步操作     —— 具体到能照着做，不是"上传旧版本"这种一句话
+  //   ③ 未实操的路径要标注原因 —— 云函数 / 数据恢复没演练过就明说，
+  //      不许让人以为三条路径都验过了
+  console.log("\n  ⑭ 回滚手册");
+  const rbPath = path.join(ROOT, "ROLLBACK.md");
+  let rOK = false, rDetail = "";
+  if (!fs.existsSync(rbPath)) {
+    rDetail = "ROLLBACK.md 不存在（演练做了但没写手册 = 出事时还得从头想）";
+  } else {
+    const rb = fs.readFileSync(rbPath, "utf8");
+    const hasTrigger = /触发条件/.test(rb);
+    const hasSteps = /分步|步骤|步骤\s*$|###\s*步骤/.test(rb) || /1\..*\n2\./.test(rb);
+    const hasNotPracticed = /不实操/.test(rb) && /原因/.test(rb);
+    const parts = [];
+    parts.push("触发条件 " + (hasTrigger ? "✅" : "❌"));
+    parts.push("分步操作 " + (hasSteps ? "✅" : "❌"));
+    parts.push("未实操路径标注原因 " + (hasNotPracticed ? "✅" : "❌"));
+    rOK = hasTrigger && hasSteps && hasNotPracticed;
+    rDetail = parts.join("；");
+    if (!rOK) rDetail += "　→ 手册不合格，补齐后发布才算真的留了退路";
+  }
+  record("⑭", "回滚手册齐不齐（触发条件/分步/未实操标注）", rOK, rDetail, true);
 
   // ---------------------------------------------------------- 汇总
   console.log("\n" + "=".repeat(66));

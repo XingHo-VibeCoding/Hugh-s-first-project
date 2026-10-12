@@ -4,6 +4,9 @@
 // ============================================================================
 // 学分上限：与云函数 courseService 的 MAX_CREDITS 保持一致。
 // 数据库 courses.credits 是 numeric(3,2)，最大 9.99（B-004 迁移后）。
+// ⚠️ Day 27 修正：categories.required_credits 是 numeric(4,2)，最大 99.99 ——
+// 因为线上已有「专业核心 42」「通识必修 38」这类要求学分，
+// numeric(3,2) 的 9.99 装不下它们。两者上限不同，这里取较大的那个。
 // 【为什么必须三处一致】前端、云函数、数据库各自的上限不同，
 // 就会出现「前端过了、云函数过了、数据库拒了」这种用户完全没做错的报错。
 //
@@ -13,11 +16,15 @@
 // 常量写在后面的话语法检查能过，页面一加载就崩。
 // 这个坑是靠真跑一次浏览器发现的，不是靠语法检查。
 // 教训：加新常量时，用真实浏览器跑一次，别只靠 node --check。
+// ⚠️ 取两列上限里较小的那个：courses 是 numeric(3,2)→9.99，
+// categories 是 numeric(4,2)→99.99。课程学分用 9.99 才够严，
+// 而板块要求学分要放到 99.99（线上有 42 的板块）。
 const MAX_CREDITS = 9.99;
+const MAX_REQUIRED_CREDITS = 99.99;
 
-// 超上限的文案（与数据库 numeric(3,2) 的上限 9.99 一致，见 MAX_CREDITS）
+// 超上限的文案（与数据库列类型一一对应，改类型时这两条要同步改）
 const CREDIT_OVER_HINT = "学分不能超过 9.99（请检查是不是把课程代码或学号填进去了）";
-const REQUIRED_CREDIT_OVER_HINT = "要求学分不能超过 9.99";
+const REQUIRED_CREDIT_OVER_HINT = "要求学分不能超过 99.99";
 
 
 // 学分规划助手 —— 页面交互与计算逻辑
@@ -75,7 +82,7 @@ function validateCategory(input) {
     if (credits <= 0) {
       return { ok: false, error: "要求学分要大于 0；不确定就留空。" };
     }
-    if (credits > MAX_CREDITS) {
+    if (credits > MAX_REQUIRED_CREDITS) {
       return { ok: false, error: REQUIRED_CREDIT_OVER_HINT };
     }
     if (!isValidCreditStep(credits)) {
@@ -262,6 +269,9 @@ function liveErrorsCategory(input) {
     const c = input.requiredCredits;
     if (typeof c !== "number" || isNaN(c)) errors.credits = "要求学分请填数字（可留空）。";
     else if (c <= 0) errors.credits = "要求学分要大于 0；不确定就留空。";
+    // ↓ Day 27 补：这里原先漏了上限检查（提交校验有、实时提示没有），
+    //   于是填 150 时输入框不报错，点提交才被拦 —— 两处反馈不一致。
+    else if (c > MAX_REQUIRED_CREDITS) errors.credits = REQUIRED_CREDIT_OVER_HINT;
     else if (!isValidCreditStep(c)) errors.credits = REQUIRED_CREDIT_STEP_HINT;
   }
 

@@ -77,7 +77,12 @@ curl -X POST …/api/courses -H "Content-Type: application/json" \
 | 日期 | zip 内容 | 验证方式 |
 |---|---|---|
 | 2026-10-04 | Day 23 的错误分级版本 | 5 个敏感词 0 命中 |
-| **2026-10-27** | **Day 27 的学分校验版本（0.25 粒度 + 类型 + 上限）** | 待填：POST credits:0.25 应返回 201 |
+| **2026-10-12** | **Day 27 的学分校验版本（0.25 粒度 + 类型 + 上限）** | ✅ 已部署并实测：<br>· `POST credits:0.25` → **201**，写进数据库 ✅<br>· `POST credits:"3"` → 400「学分必须是数字，不能是字符串」<br>· `POST credits:99999` → 400「学分不能超过 9.99…」<br>· `POST credits:1.3` → 400「学分必须是 0.25 的倍数」<br>· `DELETE` 验证数据成功，无残留 |
+
+> ✅ **2026-10-12 补记**：这次漏部署的代价是 5 天。
+> 以后改完云函数代码，**先跑 `node scripts/pack-cloudfunction.js` → 上传部署 →
+> 再打一个只有新代码才会正确响应的值**，三步缺一不可。
+> `scripts/verify-project.js` 的第 ⑬ 项会帮你盯第二步。
 | 静态托管公网地址 | `https://my-first-project-d2epfvu0373796b-1499184401.tcloudbaseapp.com` | 第 2 周主页面（`index.html`，本机存储）已上线；Day 20 新增云端数据检查台 `…/cloud.html`（读真实数据库） |
 | 云端数据检查台 | `https://my-first-project-d2epfvu0373796b-1499184401.tcloudbaseapp.com/cloud.html` | Day 20 上线。三接口健康状态 + 板块/课程真实数据 + 写入测试入口（防重复、缺字段校验），公网实测三个接口全 200 |
 | 云数据库 | CloudBase **PostgreSQL**（Day 16 开通） | 表 `categories` / `courses` 已建；脚本 `db/schema.sql`、`db/seed.sql` 已入库 |

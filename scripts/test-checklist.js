@@ -276,6 +276,12 @@ const STAMP = "T" + String(Date.now()).slice(-6);
     ["学分为字符串 '3'", { name: "类型错" + STAMP, credits: "3", categoryId: "c1", status: "done" }, 400],
     ["学分为 0", { name: "零学分" + STAMP, credits: 0, categoryId: "c1", status: "done" }, 400],
     ["学分为负", { name: "负学分" + STAMP, credits: -3, categoryId: "c1", status: "done" }, 400],
+    // ⚠️ 这条用例 Day 24 复现 B-001 时**真的写进数据库了**（credits=99999），
+    //    一直留到 Day 27 —— 直接导致数据库迁移 numeric(3,1)→(3,2) 时报
+    //    numeric field overflow，因为新精度上限只有 9.99。
+    //
+    // 现在 B-001 已修（云函数会拦下来），所以这条期望 400、**不会再写数据**。
+    // 留在这里作为回归用例：将来谁把上限校验删了，它会立刻变红。
     ["学分超大99999", { name: "超大学分" + STAMP, credits: 99999, categoryId: "c1", status: "done" }, 400],
     ["状态大小写错 Status", { name: "状态错" + STAMP, credits: 3, categoryId: "c1", status: "DONE" }, 400],
     ["成绩 101 越界", { name: "成绩越界" + STAMP, credits: 3, categoryId: "c1", status: "done", score: 101 }, 400],

@@ -377,6 +377,76 @@ select:disabled {
   box-shadow: 0 0 0 2px rgba(190, 30, 30, 0.12);
 }
 
+/* ---------- 批量操作（Day 28）---------- */
+
+/* 工具栏：勾选后出现
+   为什么用浅蓝底而不是灰底：它是个「临时工具条」，
+   跟上面的筛选行（常驻）区分开，让人一眼知道勾选后会变。 */
+.bulk-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 9px 11px;
+  border-radius: 8px;
+  background: #eef5ff;
+  border: 1px solid #cfe0f7;
+}
+
+.bulk-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.bulk-count {
+  font-size: 13px;
+  color: #1e4b8f;
+  font-weight: 600;
+}
+
+.bulk-spacer { flex: 1 1 auto; }
+
+.bulk-assign {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.bulk-assign select {
+  max-width: 190px;
+  padding: 4px 6px;
+  border: 1px solid #c3d3ea;
+  border-radius: 6px;
+  font-size: 13px;
+  background: #fff;
+}
+
+/* 卡片上的勾选框：够大才好点，够明显才不会被当成装饰 */
+.card-pick {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 2px;
+}
+
+.card-pick-box {
+  width: 17px;
+  height: 17px;
+  cursor: pointer;
+  accent-color: #2f6fd0;
+}
+
+/* 选中态：整张卡片给边框+底色，
+   不能只靠勾选框本身 —— 100 行里靠找小方框会累 */
+.course-card.is-picked {
+  background: #f5f9ff;
+  box-shadow: 0 0 0 2px rgba(47, 111, 208, 0.22);
+}
+
 /* 课程筛选行（Day 12）：输入即过滤，清空一键恢复 */
 .filter-row {
   display: flex;

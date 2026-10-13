@@ -771,6 +771,242 @@ let pendingDelete = null;       // 软删除待撤销：{ kind, id, item, index,
 let simulateDeleteFail = false; // 开发者开关：模拟删除提交失败，用于测试错误提示
 let courseFilter = { keyword: "", categoryId: "", status: "" }; // 课程列表筛选（Day 12，只影响显示不改数据）
 let expandedCourseGroups = {};  // 课程列表按板块分组的展开状态（Day 14·同伴反馈：长列表要折叠）
+
+// ---------------------------------------------------------------------------
+// 批量选择（Day 28）
+//
+// 【为什么用 Set 而不是数组】
+// 勾选/取消是高频操作，Set 的 has/add/delete 都是常数时间；
+// 数组在 100 门规模时 splice 的开销虽然可忽略，但语义上也更容易写错
+//（比如「选中的顺序」到底按勾选顺序还是按列表顺序）。
+//
+// 【为什么不存localStorage】
+// 勾选是「马上要做一件事」的中间状态，不是要长期保存的东西。
+// 刷新后清空是多数工具（邮箱、文件管理器）的做法。
+//
+// 【为什么用 id 集合而不是 DOM 引用】
+// 列表会重渲染（renderAll），DOM 引用会失效；id 是数据层的稳定标识。
+// ---------------------------------------------------------------------------
+const selectedCourseIds = new Set();
+
+function toggleCourseSelect(id, on) {
+  if (on) selectedCourseIds.add(id);
+  else selectedCourseIds.delete(id);
+}
+
+function clearCourseSelection() {
+  selectedCourseIds.clear();
+}
+
+function selectedCourses() {
+  // 按列表顺序返回，而不是 Set 的插入顺序 —— 用户看到的就是列表顺序
+  return state.courses.filter(function (c) { return selectedCourseIds.has(c.id); });
+}
+
+// ---------------------------------------------------------------------------
+// 批量工具栏（Day 28）
+// ---------------------------------------------------------------------------
+
+function renderBulkBar() {
+  const bar = document.getElementById("bulk-bar");
+  if (!bar) return;
+
+  // 课程被删光之后，已选的 id 可能已经不存在了，顺手清掉
+  // （不然批量删除会拿着不存在的 id 去操作）
+  const alive = new Set(state.courses.map(function (c) { return c.id; }));
+  Array.from(selectedCourseIds).forEach(function (id) {
+    if (!alive.has(id)) selectedCourseIds.delete(id);
+  });
+
+  const n = selectedCourseIds.size;
+  // 有课程就显示工具栏（哪怕还没勾选 —— 让用户知道「这里能批量操作」）
+  // 没课程时隐藏（选它没意义），示例数据模式下隐藏（删除本就禁用）
+  if (state.courses.length === 0 || mockMode) {
+    bar.hidden = true;
+    return;
+  }
+  bar.hidden = false;
+
+  const count = document.getElementById("bulk-count");
+  if (count) count.textContent = "已选 " + n + " 门";
+
+  // 全选勾：当前**可见**的课全部选中才算勾上
+  const allBox = document.getElementById("bulk-all");
+  const allLabel = document.getElementById("bulk-all-label");
+  if (allBox) {
+    const visible = filterCourses(state.courses, courseFilter);
+    const allSelected = visible.length > 0 && visible.every(function (c) { return selectedCourseIds.has(c.id); });
+    allBox.checked = allSelected;
+    allBox.indeterminate = !allSelected && visible.some(function (c) { return selectedCourseIds.has(c.id); });
+  }
+  if (allLabel) {
+    const visible = filterCourses(state.courses, courseFilter);
+    const allSelected = visible.length > 0 && visible.every(function (c) { return selectedCourseIds.has(c.id); });
+    allLabel.textContent = allSelected ? "取消全选" : "全选";
+  }
+
+  // 目标板块下拉
+  const sel = document.getElementById("bulk-category");
+  if (sel) {
+    const cur = sel.value;
+    sel.innerHTML = "";
+    const none = document.createElement("option");
+    none.value = "";
+    none.textContent = "（选板块）";
+    sel.appendChild(none);
+    state.categories.forEach(function (c) {
+      const o = document.createElement("option");
+      o.value = c.id;
+      o.textContent = c.name;
+      sel.appendChild(o);
+    });
+    sel.value = cur;
+  }
+
+  // 没选中时，归类/删除按钮不可用（避免空操作）
+  ["bulk-assign-btn", "bulk-delete-btn"].forEach(function (id) {
+    const btn = document.getElementById(id);
+    if (btn) btn.disabled = n === 0;
+  });
+}
+
+// 批量归类：把选中的课移到目标板块
+function bulkAssignCategory() {
+  const sel = document.getElementById("bulk-category");
+  if (!sel || !sel.value) return;
+  const targetId = sel.value;
+  if (!state.categories.some(function (c) { return c.id === targetId; })) return;
+
+  const items = selectedCourses();
+  if (items.length === 0) return;
+
+  let moved = 0;
+  state.courses.forEach(function (c) {
+    if (selectedCourseIds.has(c.id) && c.categoryId !== targetId) {
+      c.categoryId = targetId;
+      c.updatedAt = new Date().toISOString();
+      moved++;
+    }
+  });
+
+  clearCourseSelection();
+  renderAll();
+  persist();   // ⚠️ 漏了这条就只改了内存，刷新后归类全丢（实测踩过）
+  const name = categoryNameOf(state, targetId);
+  // 用页面已有的 #course-feedback 显示结果（跟「✓ 已添加课程」同一个位置），
+  // 不要自己造 toast —— 本项目没有 toast 函数，凭空调一个会在运行时崩。
+  const fb = document.getElementById("course-feedback");
+  if (fb) {
+    fb.textContent = "✓ 已把 " + moved + " 门课归到《" + name + "》";
+    fb.hidden = false;
+  }
+}
+
+// 批量删除：删之前存快照，撤销一次全部恢复
+//
+// 【为什么快照而不是逐条走现有的 pendingDelete】
+// 现有机制 pendingDelete 只记一条，撤销只能恢复最后那门。
+// 删 1 门时够用，删 100 门时**撤销只能救回 1 门**，太危险。
+//
+// 【快照存什么】
+// [{ id, item, index }] —— item 是删除前的完整对象（含成绩、状态），
+// index 是它当时在数组里的位置，恢复后顺序不变。
+function bulkDeleteCourses() {
+  if (mockMode) return;
+  const items = selectedCourses();
+  if (items.length === 0) return;
+
+  const snapshot = items.map(function (c) {
+    return {
+      id: c.id,
+      item: c,
+      index: state.courses.findIndex(function (x) { return x.id === c.id; }),
+    };
+  });
+
+  // 先给卡片加删除中的动效
+  snapshot.forEach(function (sn) {
+    const card = document.querySelector('.course-card[data-id="' + sn.id + '"]');
+    if (card) card.classList.add("removing");
+  });
+
+  window.setTimeout(function () {
+    // 真的从内存里删（此时**还没写盘** —— 与单条删除同一套时序：
+    // 撤销窗口内不落盘，超时才 saveData，保存失败还能原样恢复）
+    state.courses = state.courses.filter(function (c) { return !selectedCourseIds.has(c.id); });
+
+    if (bulkPending) commitBulkDelete();
+    bulkPending = { snapshot: snapshot, timer: null };
+
+    clearCourseSelection();
+ renderAll();
+    showBulkUndoToast(snapshot.length, bulkPending);
+  }, 260);
+}
+
+// 恢复批量删除
+function undoBulkDelete() {
+  const bp = bulkPending;
+  if (!bp) return;
+  if (bp.timer) { window.clearTimeout(bp.timer); bp.timer = null; }
+
+  // 按 index 从大到小插回去，避免打乱既有顺序
+  bp.snapshot.slice().sort(function (a, b) { return b.index - a.index; })
+    .forEach(function (sn) {
+      state.courses.splice(Math.min(sn.index, state.courses.length), 0, sn.item);
+      // 恢复后要让这门的分组展开，否则用户看不到刚恢复的东西
+      expandedCourseGroups[sn.item.categoryId || ""] = true;
+    });
+
+  bulkPending = null;
+  hideUndoToast();
+  renderAll();
+}
+
+function commitBulkDelete() {
+  // 撤销窗口到了 —— 这时才真正写盘（与单条删除 commitSave 同一套时序）
+  const bp = bulkPending;
+  if (!bp) return;
+  if (bp.timer) { window.clearTimeout(bp.timer); bp.timer = null; }
+  bulkPending = null;
+
+  const result = CreditPlanner.saveData(state);
+  if (!result.ok) {
+    // 写盘失败：把删掉的课原样放回去，不能让用户数据凭空消失
+    bp.snapshot.slice().sort(function (a, b) { return b.index - a.index; })
+      .forEach(function (sn) {
+        state.courses.splice(Math.min(sn.index, state.courses.length), 0, sn.item);
+      });
+    renderAll();
+    showUndoError("删除未能保存到本机，已为你恢复。");
+  }
+}
+
+let bulkPending = null;   // 批量删除待撤销：{ snapshot: [{id,item,index}], timer }
+
+function showBulkUndoToast(count, bp) {
+  const toastEl = document.getElementById("undo-toast");
+  const text = document.getElementById("undo-text");
+  if (!toastEl || !text) return;
+  text.textContent = "已删除 " + count + " 门课";
+  toastEl.hidden = false;
+  void toastEl.offsetWidth;
+  toastEl.classList.add("is-visible");
+
+  const progress = document.getElementById("undo-progress");
+  if (progress) {
+    progress.style.transition = "none";
+    progress.style.width = "100%";
+    void progress.offsetWidth;
+    progress.style.transition = "width 10s linear";   // 批量删给 10 秒（单条是 5 秒）
+    progress.style.width = "0%";
+  }
+
+  bp.timer = window.setTimeout(function () {
+    if (bulkPending === bp) commitBulkDelete();
+    hideUndoToast();
+  }, 10000);
+}
 let expandedOverviewRows = {};  // 决策板块每行的说明展开状态（Day 14·同伴反馈：说明文字可折叠）
 
 function showError(boxId, message) {
@@ -952,6 +1188,9 @@ function undoDelete() {
 function requestDelete(kind, id, cardEl) {
   if (mockMode) return;                  // 示例数据模式下删除按钮本就禁用，双保险
   if (pendingDelete) commitPending(true); // 已有待撤销的删除，先把上一个真正提交
+  // 批量删除也有待撤销的 —— 单条删除前必须先把它提交掉，
+  // 否则两套撤销窗口会互相覆盖（实测会丢掉批量的快照）
+  if (bulkPending) commitBulkDelete();
 
   const item = findItem(kind, id);
   if (!item) return;
@@ -1104,6 +1343,7 @@ function renderAll() {
   renderDecision();
   syncFormButtons();
   syncCopyButton();
+  renderBulkBar();   // 批量工具栏（Day 28）
 }
 
 // 没有板块时可以复制的内容是空的，先把按钮禁掉（Day 11）
@@ -1435,6 +1675,10 @@ function buildCourseCard(course) {
   card.className = "course-card";
   card.dataset.id = course.id;
 
+  // 批量选中态（Day 28）：整张卡片给边框+底色，
+  // 100 行里靠找小方框太累，整卡变化才扫得出来
+  if (selectedCourseIds.has(course.id)) card.classList.add("is-picked");
+
   // 刚新增的那一条高亮一下（Day 11）
   if (course.id === lastAddedId) {
     card.classList.add("is-new");
@@ -1442,6 +1686,19 @@ function buildCourseCard(course) {
 
   const head = document.createElement("div");
   head.className = "card-head";
+
+  // 批量选择的勾选框（Day 28）
+  // 放在卡片左上角第一个元素 —— 位置固定才符合「扫一眼就能勾」的习惯。
+  const pick = document.createElement("label");
+  pick.className = "card-pick";
+  const pickBox = document.createElement("input");
+  pickBox.type = "checkbox";
+  pickBox.className = "card-pick-box";
+  pickBox.dataset.pickId = course.id;
+  pickBox.checked = selectedCourseIds.has(course.id);
+  pickBox.setAttribute("aria-label", "选中《" + course.name + "》用于批量操作");
+  pick.appendChild(pickBox);
+  head.appendChild(pick);
 
   const title = document.createElement("strong");
   title.className = "card-title";
@@ -2766,10 +3023,62 @@ function bindEvents() {
     });
   }
 
-  // 撤销条上的“撤销”按钮
+  // 撤销条上的"撤销"按钮（Day 28：批量删除也走这里）
   const undoBtn = document.getElementById("undo-btn");
   if (undoBtn) {
-    undoBtn.addEventListener("click", undoDelete);
+    undoBtn.addEventListener("click", function () {
+      // 优先撤销批量删除 —— 它一次能救回全部，优先级高于单条
+      if (bulkPending) { undoBulkDelete(); return; }
+      undoDelete();
+    });
+  }
+
+  bindBulkEvents();
+}
+
+// 批量工具栏的事件（Day 28）
+// 单独一个函数，别把 bindEvents 撑得太长
+function bindBulkEvents() {
+  const list = document.getElementById("course-list");
+
+  // 勾选框：事件委托（列表会重渲染，绑到每个复选框上会被清掉）
+  if (list) {
+    list.addEventListener("change", function (e) {
+      const box = e.target.closest("input[data-pick-id]");
+      if (!box) return;
+      toggleCourseSelect(box.dataset.pickId, box.checked);
+      // 不走 renderAll —— 重渲染会让列表跳一下，
+      // 这里只改这一张卡片 + 工具栏，滚动位置不动
+      const card = box.closest(".course-card");
+      if (card) card.classList.toggle("is-picked", box.checked);
+      renderBulkBar();
+    });
+  }
+
+  const allBox = document.getElementById("bulk-all");
+  if (allBox) {
+    allBox.addEventListener("change", function () {
+      const on = allBox.checked;
+      // 只作用于**当前可见**的课（被筛掉的勾上也没意义，改筛选后会变孤儿）
+      filterCourses(state.courses, courseFilter).forEach(function (c) {
+        toggleCourseSelect(c.id, on);
+      });
+      renderAll();
+    });
+  }
+
+  const assignBtn = document.getElementById("bulk-assign-btn");
+  if (assignBtn) assignBtn.addEventListener("click", bulkAssignCategory);
+
+  const delBtn = document.getElementById("bulk-delete-btn");
+  if (delBtn) delBtn.addEventListener("click", bulkDeleteCourses);
+
+  const clearBtn = document.getElementById("bulk-clear-btn");
+  if (clearBtn) {
+    clearBtn.addEventListener("click", function () {
+      clearCourseSelection();
+      renderAll();
+    });
   }
 }
 

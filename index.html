@@ -125,6 +125,25 @@
         </div>
         <p class="filter-empty" id="filter-empty" hidden></p>
 
+        <!-- 批量工具栏（Day 28）
+             为什么默认不显示：一门课都没有的时候选它没意义。
+             勾选任何一门后自动出现。 -->
+        <div class="bulk-bar" id="bulk-bar" hidden>
+          <label class="bulk-check">
+            <input type="checkbox" id="bulk-all">
+            <span id="bulk-all-label">全选</span>
+          </label>
+          <span class="bulk-count" id="bulk-count">已选 0 门</span>
+          <span class="bulk-spacer"></span>
+          <label class="bulk-assign">
+            归到
+            <select id="bulk-category" aria-label="批量归类到哪个板块"></select>
+          </label>
+          <button type="button" class="btn-ghost" id="bulk-assign-btn">归类</button>
+          <button type="button" class="btn-danger" id="bulk-delete-btn">删除选中</button>
+          <button type="button" class="btn-ghost" id="bulk-clear-btn">取消选择</button>
+        </div>
+
         <div class="list" id="course-list"></div>
         </section>
       </div>

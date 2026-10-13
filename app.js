@@ -2059,7 +2059,23 @@ function renderGpa() {
     counts.textContent = state.categories.length + " 个板块 / " + state.courses.length + " 门课程";
   }
 
+  renderOnboarding();
   renderPlanReconcile(overall);
+}
+
+/* 概览页的新手引导（Day 27）
+   为什么加：第三方试用者打开网站第一反应是「是不是没加载完？怎么都是空的」。
+   数字全是「—」、决策板块空白，看起来就像坏了。
+   板块页和课程页本来就有空态文案（见 makeEmpty 那两处），只有概览页没有。
+
+   判据用「板块和课程都为空」——和页面别处的空态保持同一个标准，
+   不自己另立一套。只要用户建了任何一个板块或课程，引导就消失，
+   免得已经在用的人还被当成新来的。 */
+function renderOnboarding() {
+  const box = document.getElementById("onboarding");
+  if (!box) return;
+  const isBlank = state.categories.length === 0 && state.courses.length === 0;
+  box.hidden = !isBlank;
 }
 
 // ---------------------------------------------------------------------------
@@ -3145,7 +3161,23 @@ function bindBulkEvents() {
 }
 
 // 页面加载：先显示"加载中"，再读数据并显示
+/* 开发者工具面板：默认隐藏，网址后加 ?dev=1 才显示（Day 27）
+   为什么是「隐藏」而不是「删掉」：
+   删掉元素后 app.js 里 getElementById("mock-load") 这类代码就拿不到节点，
+   「载入示例数据」「状态预览」「模拟删除失败」这些自测手段会一起废掉。
+   只用 CSS 隐藏、元素留在 DOM 里，事件照绑，功能全在，随时能打开。 */
+function initDevPanel() {
+  const panel = document.getElementById("dev-panel");
+  if (!panel) return;
+  const flag = new URLSearchParams(window.location.search).get("dev");
+  // 顺带支持 #dev 锚点：开发时在控制台敲 location.hash = "#dev" 也能开
+  if (flag === "1" || window.location.hash === "#dev") {
+    panel.classList.add("is-dev-visible");
+  }
+}
+
 document.addEventListener("DOMContentLoaded", function () {
+  initDevPanel();
   bindEvents();
   enterLoading();
 

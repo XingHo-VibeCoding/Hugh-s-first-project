@@ -63,13 +63,51 @@ body {
   font-size: 14px;
 }
 
+/* 概览页的新手引导（Day 27）
+   只有「一个板块、一个课程都没有」时才出现（由 app.js 控制 hidden）。
+   放在最上面：试用者第一眼看到的就是「下一步做什么」，而不是两坨「—」。 */
+.panel-onboard {
+  border-color: var(--accent, #2f6fed);
+}
+
+.onboard-steps {
+  margin: 10px 0 12px;
+  padding-left: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.onboard-steps li {
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.onboard-steps b {
+  color: var(--accent, #2f6fed);
+}
+
+.onboard-tail {
+  margin: 0;
+}
+
 /* 开发者工具（示例数据 / 状态预览）：放在页面底部、虚线框弱化
-   Day 9：原先摆在头部，和产品标题并排，第一眼看上去像没做完的东西 */
+   Day 9：原先摆在头部，和产品标题并排，第一眼看上去像没做完的东西
+   Day 27：v1.0 已发布，第三方试用者第一眼就看到这块灰的「开发者工具」，
+   以为网站没做完。默认对用户隐藏 —— 由 app.js 按 ?dev=1 打开。 */
 .dev-panel {
   margin-top: 24px;
   padding: 12px 16px;
   border: 1px dashed var(--border);
   border-radius: 10px;
+  /* 默认隐藏：元素仍留在 DOM 里，app.js 的 getElementById 照常绑得上，
+     不影响「载入示例数据」「模拟删除失败」这些自测功能 */
+  display: none;
+}
+
+/* 开发模式（网址后加 ?dev=1）才显示 */
+.dev-panel.is-dev-visible {
+  display: block;
 }
 
 .dev-title {

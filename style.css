@@ -1332,6 +1332,25 @@ select:disabled {
   line-height: 1.6;
 }
 
+/* 板块必须人工指定 —— 用了更醒目的样式（Day 28）
+   为什么单独一条：这不是可选提示，是「不处理就会出错」的前置条件。
+   和上面那条「有 N 门课导不进去」性质不同 —— 那条是结果，这条是要求。 */
+.import-warn-strong {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: #fff8e6;
+  border: 1px solid #f0d89a;
+  border-left: 4px solid #d99b1a;
+  color: #6b4a06;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.import-warn-strong strong {
+  color: #8a2f22;
+}
+
 .blocked-tip {
   display: inline-block;
   margin-left: 6px;

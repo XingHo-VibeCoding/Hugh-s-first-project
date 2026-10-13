@@ -189,20 +189,53 @@
     html += '<button type="button" class="btn-ghost" data-act="nodup">只选可导入的</button>';
     html += "</div>";
 
+    // ⚠️ 板块必须自己选（Day 28）
+    //
+    // 【为什么不能自动归】
+    // 培养方案 PDF 的「课程模块 / 课程类别」是合并单元格，
+    // 一格跨几十行、名字只画一次，而且**既不在段首也不在段尾**
+    // （实测同一个组，名字一会儿上、一会儿下）。
+    // 所以「向上找」和「向下找」都会认错组。
+    //
+    // 【为什么不给错答案】
+    // 板块错了会直接误导人判断「这门课要不要修」——
+    // 比「留空让人选」严重得多。
+    html += '<div class="import-warn import-warn-strong">' +
+      "⚠️ <strong>板块要自己指定</strong>：培养方案里的板块是合并单元格，" +
+      "识别不出哪门课属于哪一块，已全部留空。" +
+      "对照培养方案在下拉框里选；" +
+      "实在不想选就留「不归板块」——留空不会算错，" +
+      "而归错板块会让人以为这门课不用修。" +
+      "</div>";
+
     html += '<div class="import-scroll"><table class="import-table"><thead><tr>';
     html += "<th class='c-pick'>导入</th><th>课程名</th><th class='c-num'>学分</th>";
     html += "<th class='c-num'>学期</th><th>板块</th>";
     html += "</tr></thead><tbody>";
 
-    items.forEach(function (it, i) {
-   const opts = ['<option value="">（不归板块）</option>'];
-      if (it.section && !categories.some(function (c) { return c.name === it.section; })) {
-    opts.push('<option value="' + esc(it.section) + '" selected>' + esc(it.section) + "（新建）</option>");
-      }
+items.forEach(function (it, i) {
+      // ⚠️ Day 28：板块**默认不归**，不再自动选中。
+      //
+      // 【为什么不自动归】
+      // PDF 里「课程模块 / 课程类别」是合并单元格，组名既不在段首也不在段尾：
+      // 量子力学A   y=198 ← 组名「专业核心课程」y=159（在下面）
+      //   数学物理方法 y=141 ← 组名「专业核心课程」y=150（在上面）
+      // 所以「向上找最近组名」和「向下找最近组名」**都会认错组**
+      // （实测：量子力学A 被归到新生研讨课程、大学英语听说被归到综合实践课程）。
+      //
+      // 既然自动归不可信，**宁可留空让人选，也不要给一个看起来对的错答案** ——
+      // 错板块会让人以为「这门课不用修」，是实质性误导。
+      //
+      // 识别到的组名仍保留成一个选项，想采纳时可一键选，但不预先选中。
+      const autoSection = it.section;
+  const opts = ['<option value=""' + (autoSection ? "" : " selected") + '>（不归板块，请自己选）</option>'];
+      if (autoSection && !categories.some(function (c) { return c.name === autoSection; })) {
+        opts.push('<option value="' + esc(autoSection) + '">' + esc(autoSection) + "（自动识别，可能不准）</option>");
+  }
       categories.forEach(function (c) {
-        const sel = it.section === c.name ? " selected" : "";
-        opts.push('<option value="' + esc(c.name) + '"' + sel + ">" + esc(c.name) + "</option>");
-   });
+     const sel = autoSection === c.name ? " selected" : "";
+ opts.push('<option value="' + esc(c.name) + '"' + sel + ">" + esc(c.name) + "</option>");
+      });
 
     const cls = it.blocked ? " class='is-blocked'" : (it.dup ? " class='is-dup'" : "");
       html += "<tr" + cls + ">";

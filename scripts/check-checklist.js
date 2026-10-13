@@ -23,14 +23,21 @@ let cur = null;
 lines.forEach((line) => {
   if (!line.trim()) return;
   const p = line.split("\t");
-  if (p[0] && p[0] !== "段") {
+  // 表头：段 / 页 / 框高 / 门数 / 课程类别 / 课程模块 / 课程名
+  // ⚠️ 「课程模块」这一列是后来加的（Day 28 修"两列混成一句"），
+  //    所以课程名从 p[5] 挪到了 p[6]。这里按表头名定位，别写死列号 ——
+  //    之前就因为加了一列没同步，体检器报"声称 4 门实际 0 门"，看着像数据坏了。
+  const COL = { 段: 0, 页: 1, 框高: 2, 门数: 3, 课程类别: 4, 课程模块: 5, 课程名: 6 };
+  if (p[COL.段] && p[COL.段] !== "段") {
     cur = {
-      no: p[0], page: p[1], h: p[2], count: Number(p[3]),
-      name: (p[4] || "").replace(/\s+/g, ""), courses: [],
+      no: p[COL.段], page: p[COL.页], h: p[COL.框高], count: Number(p[COL.门数]),
+      name: (p[COL.课程类别] || "").replace(/\s+/g, ""),
+      mod: (p[COL.课程模块] || "").replace(/\s+/g, ""),
+      courses: [],
     };
     segs.push(cur);
-  } else if (cur && p[5] && p[5].trim()) {
-    cur.courses.push(p[5].trim());
+  } else if (cur && p[COL.课程名] && p[COL.课程名].trim()) {
+    cur.courses.push(p[COL.课程名].trim());
   }
 });
 

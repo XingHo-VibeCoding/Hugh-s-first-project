@@ -162,17 +162,29 @@
     const dupCount = picked.filter(function (it) { return it.dup; }).length;
     const noSection = picked.filter(function (it) { return !it.section; }).length;
     const blockedCount = picked.filter(function (it) { return it.blocked; }).length;
-    const importable = picked.filter(function (it) { return !it.blocked; }).length;
+const importable = picked.filter(function (it) { return !it.blocked; }).length;
 
     let html = "";
 
-  html += '<div class="import-summary">';
+    html += '<div class="import-summary">';
     html += "<div><b>" + items.length + '</b>识别到的课程</div>';
-    html += "<div><b>" + importable + "</b>可以导入</div>";
+    // ⚠️ Day 28：原来写「N 可以导入」，但 N 里包含了没归板块的门，
+    //   而没归板块的会在确认时被跳过 —— 于是出现「说可以导入 100，
+    //   结果只导进 99」，看着像少了一门，其实是两回事。
+    //   现在把「真正能导进去」和「还要你补板块」分开列。
+    const noSectionCount = picked.filter(function (it) { return !it.section; }).length;
+    html += "<div><b>" + (importable - noSectionCount) + "</b>可直接导入</div>";
     if (dupCount) html += '<div><b class="warn-text">' + dupCount + "</b>列表里已有</div>";
     if (noSection) html += '<div><b class="warn-text">' + noSection + "</b>未归板块</div>";
     if (blockedCount) html += '<div><b class="bad-text">' + blockedCount + "</b>会被拒绝</div>";
     html += "</div>";
+
+    // 说清「未归板块」的会怎样 —— 否则用户以为它也算在「可直接导入」里
+    if (noSectionCount > 0) {
+    html += '<div class="import-warn">有 ' + noSectionCount +
+        " 门还没归板块，需要你在表格里选一下才能导入。" +
+        "不选的话，确认时会跳过它们（不会被算进「可直接导入」）。</div>";
+    }
 
     if (blockedCount) {
       const sample = items.filter(function (it) { return it.blocked; })

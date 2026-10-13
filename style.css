@@ -660,6 +660,15 @@ select:disabled {
   font-size: 13px;
 }
 
+/* 分组里有课被选中时，计数变主色（Day 28）
+   为什么：不加的话，折叠分组里选了多少只有展开才知道，
+   「全选之后到底选了多少」就只能靠数屏幕上看得见的勾选框 ——
+   折叠的没渲染，数出来必然少（实测报过「全选只选到 91 门」）。 */
+.course-group-count.has-picked {
+  color: #2f6fd0;
+  font-weight: 600;
+}
+
 .course-group-arrow {
   margin-left: auto;
   color: var(--text-hint);

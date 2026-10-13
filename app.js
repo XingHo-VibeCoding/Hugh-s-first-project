@@ -827,22 +827,42 @@ function renderBulkBar() {
   }
   bar.hidden = false;
 
+  // ⚠️ Day 28：光写「已选 N 门」会让人以为选漏了。
+  // 列表按板块分组且**默认折叠**，折叠分组里的课**根本没渲染出来**，
+  // 屏幕上根本看不到那些勾选框 —— 但它们确实被选中了。
+  // 用户会数一遍看得见的勾选框，发现比 N 少，就以为「全选坏了」
+  // （实测就出现过「全选只选到 91 门 / 96 门」这种报告）。
+  //
+// ⚠️ 第二版修正：第一版用 filterCourses 算隐藏数（错的，那是筛选不是折叠），
+//   改成遍历 expandedCourseGroups 的键 —— 也是错的：
+//   没手动展开过的分组**键根本不存在**（1942 行 isOpen = !!expandedCourseGroups[catId]），
+//   Object.keys 拿到空对象，于是提示永远不出现。
+  // 正确做法：直接问「这个分组合起来了吗」，跟 1942 行用同一个判据。
+  const visible = filterCourses(state.courses, courseFilter);
+  let collapsedSelected = 0;
+  visible.forEach(function (c) {
+    if (selectedCourseIds.has(c.id) && !expandedCourseGroups[c.categoryId || ""]) {
+      collapsedSelected++;
+    }
+  });
+
   const count = document.getElementById("bulk-count");
-  if (count) count.textContent = "已选 " + n + " 门";
+  if (count) {
+    count.textContent = "已选 " + n + " 门" +
+      (collapsedSelected > 0 ? "（其中 " + collapsedSelected + " 门在折叠的分组里）" : "");
+  }
 
   // 全选勾：当前**可见**的课全部选中才算勾上
   const allBox = document.getElementById("bulk-all");
   const allLabel = document.getElementById("bulk-all-label");
   if (allBox) {
-    const visible = filterCourses(state.courses, courseFilter);
     const allSelected = visible.length > 0 && visible.every(function (c) { return selectedCourseIds.has(c.id); });
     allBox.checked = allSelected;
     allBox.indeterminate = !allSelected && visible.some(function (c) { return selectedCourseIds.has(c.id); });
   }
   if (allLabel) {
-    const visible = filterCourses(state.courses, courseFilter);
     const allSelected = visible.length > 0 && visible.every(function (c) { return selectedCourseIds.has(c.id); });
-    allLabel.textContent = allSelected ? "取消全选" : "全选";
+  allLabel.textContent = allSelected ? "取消全选" : "全选";
   }
 
   // 目标板块下拉
@@ -1933,7 +1953,14 @@ function renderCourses() {
 
     const count = document.createElement("span");
     count.className = "course-group-count";
-    count.textContent = courses.length + " 门";
+    // ⚠️ Day 28：这个分组里有几门已被选中。
+    // 分组默认折叠，折叠时看不到里面的勾选框 ——
+    // 不写出来的话，「全选之后有多少」就只能靠数屏幕上看得到的勾选框，
+    // 数出来的必然比实际少（实测报过「全选只选到 91 门」）。
+    const pickedInGroup = courses.filter(function (c) { return selectedCourseIds.has(c.id); }).length;
+    count.textContent = courses.length + " 门" +
+      (pickedInGroup > 0 ? " · 已选 " + pickedInGroup : "");
+    if (pickedInGroup > 0) count.classList.add("has-picked");
 
     const arrow = document.createElement("span");
     arrow.className = "course-group-arrow";
@@ -1943,9 +1970,13 @@ function renderCourses() {
     head.appendChild(title);
     head.appendChild(count);
     head.appendChild(arrow);
-    head.addEventListener("click", function () {
+head.addEventListener("click", function () {
       expandedCourseGroups[catId] = !expandedCourseGroups[catId];
       renderCourses();
+      // Day 28：展开/折叠会改变「有几门在折叠的分组里」，
+      // 不刷新工具栏的话，「已选 30 门（其中 20 门在折叠的分组里）」
+      // 会一直停在这个数字，用户展开完了看到的是过时的信息。
+      renderBulkBar();
     });
     group.appendChild(head);
 
@@ -2405,6 +2436,10 @@ function importPlanItems(items) {
   let added = 0;
   const skipped = [];
   const unclassified = [];
+  // 本次导入里因「与已有课程同名」被跳过的名字（Day 28）
+  // 用来在结果提示里把两种跳过原因分开说 ——
+  // 「重名」要去删旧的，「学分不合法」要去改学分，处理方式完全相反
+  const dupThisRun = [];
 
   // 先把用到的板块建出来，并把培养方案原文的「要求学分」一起填进去。
   // 每条课程可以带 sectionRequired；同名板块取第一个非空值。
@@ -2425,14 +2460,16 @@ function importPlanItems(items) {
   const ensured = ensureCategories(state, sectionMeta);
   state = ensured.data;
 
-  for (const it of items) {
+for (const it of items) {
     const name = (it.name || "").trim();
     if (!name) continue;
 
     // 已经有同名课程就跳过，不重复添加
     const dup = state.courses.some(function (c) { return c.name === name; });
     if (dup) {
-      skipped.push(name);
+    skipped.push(name);
+      // 记下来：后面要把「重名」和「学分不合法」分开说（Day 28）
+      dupThisRun.push(name);
       continue;
     }
 
@@ -2471,8 +2508,33 @@ function importPlanItems(items) {
   }
 
   let message = "已导入 " + added + " 门课程。";
-  if (skipped.length) message += " 跳过 " + skipped.length + " 门（已存在或数据不合法）。";
-  if (unclassified.length) message += " 其中 " + unclassified.length + " 门没归到板块，需要你手动选。";
+  // ⚠️ Day 28改：把「跳过」的原因分开说。
+  //
+  // 【为什么要改】原来是「跳过 N 门（已存在或数据不合法）」——
+  //   把两种完全不同的原因混在一句里，用户看到「说好的 100，怎么少了 1」，
+  //   但既不知道是哪门，也不知道为什么，只能猜。
+  //   而且「已存在」和「数据不合法」的处理方式完全相反：
+  //   前者要去删掉已有的那门，后者要改学分 —— 不说清就等于没说。
+  if (skipped.length) {
+    message += " 跳过 " + skipped.length + " 门（";
+    // 分类统计：重名 vs 校验不过
+    const dupNames = skipped.filter(function (n) { return dupThisRun.indexOf(n) >= 0; });
+    const invalidNames = skipped.filter(function (n) { return dupThisRun.indexOf(n) < 0; });
+    if (dupNames.length) message += dupNames.length + " 门与已有课程同名";
+    if (invalidNames.length) {
+      if (dupNames.length) message += "，";
+      message += invalidNames.length + " 门没通过学分校验（" +
+        invalidNames.slice(0, 3).join("、") + (invalidNames.length > 3 ? " 等" : "") + "）";
+    }
+    message += "）。";
+  }
+  if (unclassified.length) {
+    // 没归板块的门也算没导入成功，必须在这里说清，
+    // 否则摘要上写「可以导入 100」，实际只进了 99，看着像少了一门
+    message += " 另有 " + unclassified.length + " 门没归到板块" +
+      "（" + unclassified.slice(0, 3).join("、") + (unclassified.length > 3 ? " 等" : "") +
+      "），需要你手动选板块后重新导入。";
+  }
   // 说明「已修 0 分」不是出错：培养方案列的是「可以修的课」，
   // 不是「你已经修过的课」。默认全记为计划修，用户自己改成已修。
   message += "这些课都记为「计划修」，修过的改成「已修」后概览才会算进已修学分。";

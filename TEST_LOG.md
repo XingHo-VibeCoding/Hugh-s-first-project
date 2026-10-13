@@ -126,7 +126,7 @@ Windows 上用「命令提示符（CMD）」或「PowerShell」都行；Mac 用�
 3. 记录耗时
 
 ### 环境事实
-- 域名：`https://my-first-project-d2epvu03737986b-1499184401.tcloudbaseapp.com`
+- 域名：`https://my-first-project-d2epfvu0373796b-1499184401.tcloudbaseapp.com`
 - **CloudBase 静态托管没有历史版本一键回退**，
   所以回退只能是「上传旧版本文件覆盖」——这也是本次演练的实际做法
 - v0.9 与 v1.0 的**静态文件清单完全相同**，差异只有 `app.js`（+18/-4，B-004 学分上限修正）

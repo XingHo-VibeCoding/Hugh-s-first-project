@@ -683,6 +683,55 @@ const sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms
   }
   record("⑭", "回滚手册齐不齐（触发条件/分步/未实操标注）", rOK, rDetail, true);
 
+  // ⑮ 域名一致性 —— 防「凭记忆拼域名」
+  //
+  // 【为什么加这项】Day 27/28 连续两次把域名拼错（少f 多 8），
+  //   导致试用者第一步就打不开，而我还先怪平台、怪域名过期，
+  //   绕了一大圈。**域名拼错是能自动查出来的，不该靠人眼发现。**
+  //
+  // 【怎么查】全仓库搜tcloudbaseapp.com 的域名，
+  //   只要出现两种不同写法 → FAIL。
+  //   唯一的正确域名写在这里，要改必须连这里一起改（这就是「逐字抄」）。
+  const CORRECT_HOST = "my-first-project-d2epfvu0373796b-1499184401.tcloudbaseapp.com";
+  const mdFiles = ["index.html", "cloud.html", "TRIAL_SCRIPT_DAY27.md",
+    "TRIAL_LOG_DAY27.md", "ROLLBACK.md", "IMPORT_VERIFY.md",
+    "TEST_LOG.md", "RESOURCE_STATUS.md", "SECTION_TRUTH.md"];
+  const hostFound = {};
+  mdFiles.forEach(function (f) {
+    if (!fs.existsSync(f)) return;
+    const txt = fs.readFileSync(f, "utf8");
+    const re = /([a-z0-9-]+\.tcloudbaseapp\.com)/g;
+    let m;
+    while ((m = re.exec(txt))) {
+      //记录：哪个文件、哪个域名
+      if (!hostFound[m[1]]) hostFound[m[1]] = [];
+      hostFound[m[1]].push(f);
+    }
+  });
+  const hosts = Object.keys(hostFound);
+  // ⚠️ **不能用「排除反例」的方式判断** ——
+  //   第一版把拼错的那个域名列进「允许的反例」，结果：
+  //   故意把试用脚本改错 → 仍报 PASS（自己做的反向测试直接把它测穿了）。
+  // 正确做法：**逐个文件判断**。允许反例的只有 TRIAL_LOG_DAY27.md 一个文件，
+  //   其他任何文件出现非 CORRECT_HOST 的域名 → FAIL。
+  const badFiles = [];
+  Object.keys(hostFound).forEach(function (h) {
+    hostFound[h].forEach(function (f) {
+      if (h === CORRECT_HOST) return;
+      if (f === "TRIAL_LOG_DAY27.md") return;   // 反例只允许出现在试用记录里
+      badFiles.push(f + " 里的 " + h);
+    });
+  });
+  const hasCorrect = hosts.indexOf(CORRECT_HOST) >= 0;
+  const dOK = hasCorrect && badFiles.length === 0;
+  let dDetail = "正确域名出现 " + (hostFound[CORRECT_HOST] || []).length + " 处";
+  if (badFiles.length) {
+    dDetail += "；❌ 拼错 " + badFiles.length + " 处 → " + badFiles.slice(0, 3).join("；");
+  } else {
+    dDetail += "，无其他写法";
+  }
+  record("⑮", "域名写法全仓库一致（防拼错）", dOK, dDetail, true);
+
   // ---------------------------------------------------------- 汇总
   console.log("\n" + "=".repeat(66));
   const passed = results.filter(function (r) { return r.pass; }).length;

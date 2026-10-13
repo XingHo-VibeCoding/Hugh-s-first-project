@@ -107,7 +107,7 @@ const credits = cell.innerText;                                  // ❌ 永远�
 
 ### 需要你做的（3 分钟）
 
-1. 打开 `https://my-first-project-d2epvu03737986b-1499184401.tcloudbaseapp.com`
+1. 打开 `https://my-first-project-d2epfvu0373796b-1499184401.tcloudbaseapp.com`
 2. 课程页 → 「导入培养方案」→ 拖入同一个 PDF
 3. 看**待确认表格**里：
    - 行数是不是 **100**

@@ -34,7 +34,7 @@
 打开这个网址：
 
 ```
-https://my-first-project-d2epvu03737986b-1499184401.tcloudbaseapp.com
+https://my-first-project-d2epfvu0373796b-1499184401.tcloudbaseapp.com
 ```
 
 看到页面后，**先别动**，用 10 秒看一下页面，然后说出你第一眼看到的这是什么。

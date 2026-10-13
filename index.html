@@ -223,13 +223,21 @@
     <span class="undo-progress" id="undo-progress"></span>
   </div>
 
-  <script src="store.js"></script>
-  <script src="app.js"></script>
-  <script src="importer/extract-courses.js"></script>
-  <script src="importer/pdf-reader.js"></script>
-  <script src="importer/docx-reader.js"></script>
-  <script src="importer/importer-ui.js"></script>
-  <script src="review/review-ui.js"></script>
+  <!-- 本地资源引用一律带版本戳（Day 27 / B-006）
+       为什么：不带 ?v= 的话，URL 永远不变，浏览器和 CDN 都按 URL 认文件
+       → 发了新版/回退后，它们会一直吐旧的那份。
+       症状：F5 猛刷没用、刷新控制台没用，**只有重启浏览器才生效**
+       （Day 26 回退演练时被这个骗了两次，一度以为回退机制不可用）。
+       改动：发布或回退后，把 VER 改成当天的日期（v20261013 格式）。
+       不用写具体时间戳，日期够用 —— 同一天反复发布本来就是小概率。
+       另一种解法是在 CloudBase 控制台设缓存配置，两种都做更稳。 -->
+  <script src="store.js?v=20261013"></script>
+  <script src="app.js?v=20261013"></script>
+  <script src="importer/extract-courses.js?v=20261013"></script>
+  <script src="importer/pdf-reader.js?v=20261013"></script>
+  <script src="importer/docx-reader.js?v=20261013"></script>
+  <script src="importer/importer-ui.js?v=20261013"></script>
+  <script src="review/review-ui.js?v=20261013"></script>
 
   <!-- 凭记忆确认已修 · 清单页（Day 26）
        做成覆盖整页的浮层而不是又一个 tab：这是一次性的专注任务，

@@ -22,7 +22,14 @@ DROP TABLE IF EXISTS public.categories CASCADE;
 CREATE TABLE public.categories (
   id               varchar(32)  PRIMARY KEY,
   name             varchar(20)  NOT NULL UNIQUE,
-  required_credits numeric(3,1) NULL,
+  -- ⚠️ Day 27（B-004）实测确认：两列都是 numeric(4,2)，不是 (3,1) 也不是 (3,2)。
+  --    线上跑过这条查询确认（2026-10-13）：
+  --      table_name  | column_name       | precision | scale
+  --      courses     | credits           |     4      |  2
+  --      categories  | required_credits  |     4      |  2
+  --    为什么不用 (3,2)：上限只有 9.99，装不下 categories 里已有的
+  --    「专业核心 42」「通识必修 38」。(4,2) 上限 99.99，两列通用。
+  required_credits numeric(4,2) NULL,
   note             varchar(100) NULL,
   created_at       timestamptz  NOT NULL DEFAULT now(),
   updated_at       timestamptz  NOT NULL DEFAULT now(),
@@ -30,22 +37,24 @@ CREATE TABLE public.categories (
   -- 名称去空格后不能为空（契约：非空）
   CONSTRAINT categories_name_not_blank
     CHECK (btrim(name) <> ''),
-  -- 要求学分：允许为空；填了就必须 >0 且是 0.5 的倍数（契约第二节）
-  CONSTRAINT categories_required_credits_half
-    CHECK (required_credits IS NULL OR (required_credits > 0 AND mod(required_credits, 0.5) = 0))
+  -- 要求学分：允许为空；填了就必须 >0 且是 0.25 的倍数（Day 27 起从 0.5 放宽到 0.25）
+  CONSTRAINT categories_required_credits_quarter
+    CHECK (required_credits IS NULL OR (required_credits > 0 AND mod(required_credits, 0.25) = 0))
 );
 
 COMMENT ON TABLE  public.categories IS '学分板块：培养方案里的一个学分类别，如"专业选修"';
 COMMENT ON COLUMN public.categories.id               IS '主键，字符串，与前端 id 一致';
 COMMENT ON COLUMN public.categories.name             IS '板块名，非空且全局唯一，≤20 字';
-COMMENT ON COLUMN public.categories.required_credits IS '要求学分；可空表示用户还没填（页面显示"未设置"）；0.5 的倍数';
+COMMENT ON COLUMN public.categories.required_credits IS '要求学分；可空表示用户还没填（页面显示"未设置"）；0.25 的倍数';
 COMMENT ON COLUMN public.categories.note             IS '特殊条件备注，如"须含 2 学分艺术类"，可空';
 
 -- ---------- 表 2：courses（课程） ----------
 CREATE TABLE public.courses (
   id                varchar(32)  PRIMARY KEY,
   name              varchar(30)  NOT NULL,
-  credits           numeric(3,1) NOT NULL,
+  -- ⚠️ Day 27（B-004）实测确认：numeric(4,2)，上限 99.99。
+  --    线上 2026-10-13 查询结果：precision=4, scale=2
+  credits           numeric(4,2) NOT NULL,
   -- 外键：指向板块。ON DELETE SET NULL 对应契约第 5 条 mode=move
   -- （删板块时不删课，把课置为"未归类"）
   category_id       varchar(32)  NULL REFERENCES public.categories(id) ON DELETE SET NULL,
@@ -59,9 +68,10 @@ CREATE TABLE public.courses (
 
   CONSTRAINT courses_name_not_blank
     CHECK (btrim(name) <> ''),
-  -- 学分必须 >0 且是 0.5 的倍数（契约第二节）
-  CONSTRAINT courses_credits_half
-    CHECK (credits > 0 AND mod(credits, 0.5) = 0),
+  -- 学分必须 >0 且是 0.25 的倍数（Day 27 起从 0.5 放宽到 0.25，
+  -- 因为真实培养方案里「形势与政策」是 0.25 学分/学期，一门课）
+  CONSTRAINT courses_credits_quarter
+    CHECK (credits > 0 AND mod(credits, 0.25) = 0),
   -- 状态二选一（契约：done 已修 / planned 计划修）
   CONSTRAINT courses_status_enum
     CHECK (status IN ('done', 'planned')),
@@ -76,7 +86,7 @@ CREATE TABLE public.courses (
 COMMENT ON TABLE  public.courses IS '课程：一门已修或计划修的课，属于某个板块';
 COMMENT ON COLUMN public.courses.id                IS '主键，字符串';
 COMMENT ON COLUMN public.courses.name              IS '课程名，非空，≤30 字';
-COMMENT ON COLUMN public.courses.credits           IS '学分，0.5 的倍数；用 numeric 而非 float，避免 0.1+0.2 类浮点误差';
+COMMENT ON COLUMN public.courses.credits           IS '学分，0.25 的倍数；用 numeric 而非 float，避免 0.1+0.2 类浮点误差';
 COMMENT ON COLUMN public.courses.category_id       IS '所属板块；NULL 表示"未归类"（板块被删后自动置空）';
 COMMENT ON COLUMN public.courses.status            IS 'done=已修 / planned=计划修';
 COMMENT ON COLUMN public.courses.score             IS '成绩 0–100，可空；为空不计入 GPA';

@@ -118,11 +118,14 @@ pre {
   <div id="out"></div>
 </div>
 
+<!-- 本地资源引用带版本戳，理由同 index.html（B-006：URL 不变就一直吐旧副本）。
+     CDN 上的 pdf.js / JSZip 不加 —— 它们本来就是固定版本的远程文件，
+     由 CDN 自己管缓存；加了反而让版本对不上。 -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-<script src="importer/extract-courses.js"></script>
-<script src="importer/pdf-reader.js"></script>
-<script src="importer/docx-reader.js"></script>
+<script src="importer/extract-courses.js?v=20261013"></script>
+<script src="importer/pdf-reader.js?v=20261013"></script>
+<script src="importer/docx-reader.js?v=20261013"></script>
 <script>
 (function () {
   "use strict";

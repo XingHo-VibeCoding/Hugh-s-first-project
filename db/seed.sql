@@ -22,20 +22,20 @@ DROP TABLE IF EXISTS public.categories CASCADE;
 CREATE TABLE public.categories (
   id               varchar(32)  PRIMARY KEY,
   name             varchar(20)  NOT NULL UNIQUE,
-  required_credits numeric(3,1) NULL,
+  required_credits numeric(4,2) NULL,
   note             varchar(100) NULL,
   created_at       timestamptz  NOT NULL DEFAULT now(),
   updated_at       timestamptz  NOT NULL DEFAULT now(),
   CONSTRAINT categories_name_not_blank
     CHECK (btrim(name) <> ''),
-  CONSTRAINT categories_required_credits_half
-    CHECK (required_credits IS NULL OR (required_credits > 0 AND mod(required_credits, 0.5) = 0))
+  CONSTRAINT categories_required_credits_quarter
+    CHECK (required_credits IS NULL OR (required_credits > 0 AND mod(required_credits, 0.25) = 0))
 );
 
 CREATE TABLE public.courses (
   id                varchar(32)  PRIMARY KEY,
   name              varchar(30)  NOT NULL,
-  credits           numeric(3,1) NOT NULL,
+  credits           numeric(4,2) NOT NULL,
   category_id       varchar(32)  NULL REFERENCES public.categories(id) ON DELETE SET NULL,
   status            varchar(10)  NOT NULL DEFAULT 'planned',
   score             smallint     NULL,
@@ -45,8 +45,8 @@ CREATE TABLE public.courses (
   updated_at        timestamptz  NOT NULL DEFAULT now(),
   CONSTRAINT courses_name_not_blank
     CHECK (btrim(name) <> ''),
-  CONSTRAINT courses_credits_half
-    CHECK (credits > 0 AND mod(credits, 0.5) = 0),
+  CONSTRAINT courses_credits_quarter
+    CHECK (credits > 0 AND mod(credits, 0.25) = 0),
   CONSTRAINT courses_status_enum
     CHECK (status IN ('done', 'planned')),
   CONSTRAINT courses_score_range

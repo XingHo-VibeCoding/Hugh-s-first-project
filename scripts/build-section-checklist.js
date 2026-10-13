@@ -57,6 +57,9 @@ const PAGE_URL = "http://127.0.0.1:8899/importer-lab.html";
       ];
 
       const pages = [];
+      // 列位置：**整张表共用**，只在第一张表格页读一次表头，之后各页沿用。
+      // 见下面那段注释的详细原因（表头只在第 4 页印一次）。
+      let COLS = null;
       for (let pno = 1; pno <= doc.numPages; pno++) {
         const pg = await doc.getPage(pno);
         const H = pg.getViewport({ scale: 1 }).height;
@@ -99,52 +102,97 @@ const PAGE_URL = "http://127.0.0.1:8899/importer-lab.html";
           else if (dx < 1.0 && dy > 3) vLines.push({ x: (s.x1 + s.x2) / 2, y1: Math.min(s.y1, s.y2), y2: Math.max(s.y1, s.y2) });
         });
 
-        // ---- 列位置从表头读 ----
-        const heads = items.filter((i) => /^(课程模块|课程类别|课程号|课程名|总学分)$/.test(i.s));
-        const hx = {};
-        heads.forEach((h) => { if (!(h.s in hx)) hx[h.s] = h.x; });
-        if (hx["课程类别"] == null || hx["课程号"] == null) continue;
-        const catL = (hx["课程模块"] + hx["课程类别"]) / 2;
-        const catR = (hx["课程类别"] + hx["课程号"]) / 2;
+// ---- 列位置：只用**第一张表格页**的表头，其余页沿用 ----
+    //
+    // 【关键发现（diag-table-pages.js 实测）】
+    // 表头只印在第 4 页（第一张表格页），第 5~9 页**没有表头**——
+    // 跨页表格的常态，表头不会每页重复。
+    //
+    // 之前每页各自去找表头，第 5~9 页找不到就 `continue` 跳过，
+    // 结果 100 门课只处理了 9 门（只剩第 4 页）。
+    //
+    // 正确做法：列位置是**整张表共用的**，取第一页的表头定下来，
+    // 后面所有页都套用同一套 x 边界。
+    if (!COLS) {
+      const heads = items.filter((i) => /^(课程模块|课程类别|课程号|课程名|总学分)$/.test(i.s));
+      const hx = {};
+      heads.forEach((h) => { if (!(h.s in hx)) hx[h.s] = h.x; });
+      if (hx["课程类别"] == null || hx["课程号"] == null) {
+        // 不是第一张表格页 —— 用上一页定好的列位置
+        pages.push({ pno, items, hLines, vLines, courses: [], segs: [] });
+        continue;
+      }
+      COLS = {
+        catL: (hx["课程模块"] + hx["课程类别"]) / 2,
+        catR: (hx["课程类别"] + hx["课程号"]) / 2,
+        codeL: (hx["课程类别"] + hx["课程号"]) / 2,
+        codeR: hx["课程名"],
+        nameL: (hx["课程类别"] + hx["课程号"]) / 2,
+        nameR: hx["总学分"] + 40,
+        creditL: hx["总学分"] - 15,
+        creditR: hx["总学分"] + 45,
+        fromPage: pno,
+      };
+    }
+    const { catL, catR, codeL, codeR, nameL, nameR, creditL, creditR } = COLS;
 
         // ---- 类别列的竖线：按 x 聚类，找左右边界 ----
         const catV = vLines
           .filter((v) => v.x > catL - 14 && v.x < catR + 14)
-          .sort((a, b) => b.y2 - b.y2);
+          // ⚠️ 第一版写成 `.sort((a, b) => b.y2 - b.y2)` —— **两个参数一样，等于没排**，
+          //   导致后面的相邻段计算全错，75 段只剩 4 段。
+          //   按 y1 升序才是要的顺序（从上往下）。
+          .sort((a, b) => a.y1 - b.y1);
         // 合并单元格里没有内部竖线，所以每条竖线 = 一个段的下边
         const edges = [...new Set(catV.map((v) => Math.round(v.y2)))].sort((a, b) => a - b);
 
 // ---- 课程行 ----
-        // ⚠️ 列范围不能写死数字（实测页间会变）：
-        //   第 4 页表头 课程类别x=199 课程号x=292，但靠后的页列宽不一样，
-        //   写死 [x-20, x+60] 只抓到 9 门。改成用「类别列右边界 ~ 课程名表头」这个区间，
-        //   课程号落在其中即可 —— 靠表头定位，不靠魔法数字。
-        const codeL = catR, codeR = hx["课程名"];
+        // 列范围用上面定好的 COLS（来自第一页表头），不写死魔法数字 ——
+        // 页间列宽可能变，但列的**相对位置**不变。
         const courses = items
           .filter((i) => /^YN25/.test(i.s) && i.x > codeL && i.x < codeR)
           .map((code) => {
             const name = items
-              .filter((i) => i.x > catR && i.x < hx["总学分"] + 40 && /[一-龥]/.test(i.s))
+              .filter((i) => i.x > nameL && i.x < nameR && /[一-龥]/.test(i.s))
               .sort((a, b) => Math.abs(a.y - code.y) - Math.abs(b.y - code.y))[0];
             const cr = items
-              .filter((i) => i.x > hx["总学分"] - 15 && i.x < hx["总学分"] + 45 &&
+              .filter((i) => i.x > creditL && i.x < creditR &&
                             /^[\d.]+$/.test(i.s) && i.s.indexOf(".") > 0)
               .sort((a, b) => Math.abs(a.y - code.y) - Math.abs(b.y - code.y))[0];
             return { code: code.s, y: code.y, name: name ? name.s : "", credits: cr ? cr.s : "" };
           })
           .filter((c) => c.name);
 
-        // ---- 切段：每条竖线的 y2 是一个段的下边 ----
-        // 段内文字 = 上下两条竖线之间、类别列 x 范围内的文字
+        // ---- 切段：用**横线**，不是竖线 ----
+        //
+        // ⚠️ 这条走过弯路，记下来别再走：
+        // ① 第一版用「每条竖线各自成段」→ 同一门课落进多个段（270 门 vs 实际 100）
+        // ② 改成「相邻竖线之间成段」→ 段数暴跌到 4、甚至 2
+        //    因为**类别列压根没有竖线**（第 5 页实测：类别列竖线 0 条、横线 10 条）
+        // ③ 又发现竖线排序写成 `.sort((a,b) => b.y2 - b.y2)`（两个参数一样=没排）
+        //
+        // ✅ 正确依据：**横线**。合并单元格的上下边界是横线，
+        //    「上下最近的两条横线之间」= 一个组 —— 这跟竖线完全无关。
+        //    实测第 5 页 22 门课干净地分成 3 段（高 115 / 201 / …），边界不重叠。
         const segsOut = [];
-        const bounds = [Math.min(...catV.map((v) => v.y1)), ...edges].sort((a, b) => a - b);
-        for (let i = 0; i < catV.length; i++) {
-          const lo = catV[i].y1, hi = catV[i].y2;
-          if (hi - lo < 8) continue; // 太矮的是标题行/表头
+        // 类别列范围内的横线（x 跨过类别列），去重后按 y 排
+        const catHs = [...new Set(
+          hLines
+            .filter((l) => l.x1 < catR + 20 && l.x2 > catL - 20)
+            .map((l) => Math.round(l.y))
+        )].sort((a, b) => b - a);
+
+        // 相邻两条横线之间 = 一段
+        for (let i = 0; i < catHs.length - 1; i++) {
+          const hi = catHs[i];      // 上边（y 大 = 靠上）
+          const lo = catHs[i + 1];  // 下边
+          if (hi - lo < 8) continue;      // 太矮的是表头行/分隔细线
           const texts = items
-            .filter((i) => i.x > catL && i.x < catR && i.y >= lo && i.y <= hi && /[一-龥（）()：:]/.test(i.s))
-            .sort((a, b) => a.y - b.y).map((i) => i.s).join("");
-          const inside = courses.filter((c) => c.y > lo && c.y < hi);
+            .filter((it) => it.x > catL && it.x < catR && it.y > lo && it.y <= hi &&
+                              /[一-龥（）()：:]/.test(it.s))
+            .sort((a2, b2) => a2.y - b2.y).map((it) => it.s).join("");
+          const inside = courses.filter((c) => c.y > lo && c.y <= hi);
+          if (inside.length === 0 && !texts) continue;   // 空段不要
           segsOut.push({ lo, hi, h: Math.round(hi - lo), name: texts, courses: inside });
         }
 

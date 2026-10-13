@@ -42,12 +42,30 @@ ok("index.html 里有 id=onboarding 的容器",
 
 // ---------- 2. 空态引导的判据 ----------
 console.log("\n② 空态引导判据");
+// Day 27 第 2 轮重测后改过：原来是「板块和课程都为空才显示」，
+// 但试用者浏览器里已有上一轮的数据 → 判据为假 → 引导不显示 → 他的「一片空」没变。
+// 现在改成**常驻 + 两种文案**。所以检查项也从「查旧判据」改成「查新判据」，
+// 并且要能防住有人改回旧写法（见下方反向测试）。
 ok("app.js 里有 renderOnboarding 函数",
    /function\s+renderOnboarding\s*\(/.test(appJs));
 ok("renderGpa 会调用 renderOnboarding",
-   /renderGpa[\s\S]{0,900}renderOnboarding\s*\(\s*\)/.test(appJs));
-ok("判据是「板块和课程都为空」",
-   /categories\.length\s*===\s*0\s*&&\s*state\.courses\.length\s*===\s*0/.test(appJs));
+   /renderGpa[\s\S]{0,1400}renderOnboarding\s*\(\s*\)/.test(appJs));
+ok("引导块常驻，不再因有数据而隐藏（不能再写 box.hidden = !isBlank）",
+   !/box\.hidden\s*=\s*!isBlank/.test(appJs));
+ok("有「已有数据」那一支文案（标题换成不是「从这里开始」）",
+   /你现在录到这儿了/.test(appJs));
+ok("会解释决策板块为什么空（要求学分）", /要求学分/.test(appJs));
+ok("成绩缺失判据是「已修课没成绩」，不是「已修数 < 总数」",
+   /missingScore/.test(appJs));
+// 只看「真正的代码」，剥掉注释再查 —— 否则注释里写的
+// 「原来写的是 doneCount < courseCount」会把这项误判成 FAIL
+const codeOnly = appJs
+  .replace(/\/\*[\s\S]*?\*\//g, "")   // 块注释
+  .replace(/^\s*\/\/.*$/gm, "");     // 行注释
+ok("代码里没有 doneCount < courseCount 这种旧写法（注释不算）",
+   !/doneCount\s*<\s*courseCount/.test(codeOnly));
+ok("但注释里留了踩坑记录（说明改过、为什么改）",
+   /doneCount\s*<\s*courseCount/.test(appJs));
 
 // ---------- 3. dev 面板开关 ----------
 console.log("\n③ 开发者工具开关");
@@ -63,12 +81,20 @@ ok("DOMContentLoaded 里调用了 initDevPanel",
 
 // ---------- 4. 反向测试：故意写错，检查项必须 FAIL ----------
 console.log("\n④ 反向测试（故意做错，确认上面几项真的能测出来）");
-const badApp = appJs.replace(
-  /state\.categories\.length\s*===\s*0\s*&&\s*state\.courses\.length\s*===\s*0/,
-  "true"
-);
+
+// 反向测试 4-1：模拟「第 1 版的判据」，看「常驻」这项能不能拦住
+const oldVersionLogic = "  const isBlank = true;\n  box.hidden = !isBlank;";
+ok("模拟旧写法（有数据就隐藏）→ 被「常驻」这项测出来",
+   /box\.hidden\s*=\s*!isBlank/.test(oldVersionLogic));
+
+// 反向测试 4-2：模拟「旧的错误成绩判据」，看能不能被「missingScore」这项拦住
+const oldScoreLogic = "  const missingScore = (doneCount < courseCount) ? 1 : 0;";
+ok("模拟旧成绩判据（doneCount < courseCount）→ 被成绩判据这项测出来",
+   /doneCount\s*<\s*courseCount/.test(oldScoreLogic));
+ok("旧写法缺少 missingScore 变量名 → 能区分出新旧",
+   !/const\s+missingScore\s*=\s*state\.courses/.test(oldScoreLogic));
+
 const badCss = css.replace(/(\.dev-panel\s*\{[^}]*?)display:\s*none/, "$1display: block");
-ok("把判据换成恒真 → 「判据是两者都为空」应 FAIL", !/categories\.length\s*===\s*0\s*&&\s*state\.courses\.length\s*===\s*0/.test(badApp));
 ok("把 display:none 改成 block → 应 FAIL", !/\.dev-panel\s*\{[^}]*display:\s*none/.test(badCss));
 
 console.log("\n=== 结果：" + (fail === 0 ? "全部通过" : fail + " 项失败") + " ===");

@@ -2063,19 +2063,81 @@ function renderGpa() {
   renderPlanReconcile(overall);
 }
 
-/* 概览页的新手引导（Day 27）
-   为什么加：第三方试用者打开网站第一反应是「是不是没加载完？怎么都是空的」。
-   数字全是「—」、决策板块空白，看起来就像坏了。
-   板块页和课程页本来就有空态文案（见 makeEmpty 那两处），只有概览页没有。
+/* 概览页的引导块（Day 27 第 2 轮重测后改）
+   改的原因：第 1 版只在「一个板块、一个课程都没有」时显示。
+   但重测发现试用者浏览器里**已经有**上一轮测的数据（专业选修 / 高等数学），
+   判据为假 → 引导块不显示 → 他的「一片空」感受**一点没变**。
 
-   判据用「板块和课程都为空」——和页面别处的空态保持同一个标准，
-   不自己另立一套。只要用户建了任何一个板块或课程，引导就消失，
-   免得已经在用的人还被当成新来的。 */
+   教训：概览页的「空」不等于「没数据」。
+   他有数据，但绩点算不出来（成绩留空）、决策也算不出差额（板块没填要求学分），
+   所以**多数情况下概览页看起来都是空的**，不只是最极端的「什么都没有」。
+
+   现在的做法：引导块**常驻**，只换文案 —— 告诉用户「你有多少数据、下一步去哪」。
+   这样不管他在哪一步，都不会看到一片没解释的空白。 */
 function renderOnboarding() {
   const box = document.getElementById("onboarding");
   if (!box) return;
-  const isBlank = state.categories.length === 0 && state.courses.length === 0;
-  box.hidden = !isBlank;
+
+  const title = document.getElementById("onboarding-title");
+  const lead = document.getElementById("onboarding-lead");
+  const steps = document.getElementById("onboarding-steps");
+
+  const catCount = state.categories.length;
+  const courseCount = state.courses.length;
+  const doneCount = state.courses.filter(countsAsDoneCredits).length;
+
+  // 已经填了「要求学分」的板块，才算得出还差多少
+  const withRequired = gapStats.filter(function (s) { return s.required !== null; });
+  const totalGap = withRequired.reduce(function (sum, s) { return sum + s.gap; }, 0);
+  const lackRequired = gapStats.length - withRequired.length;
+
+  if (catCount === 0 && courseCount === 0) {
+    // 情况一：什么都没有
+    if (title) title.textContent = "从这里开始";
+    if (lead) {
+      lead.textContent = "这里现在还是空的，不是加载失败。填数据只要两步：";
+    }
+    if (steps) steps.hidden = false;
+    return;
+  }
+
+  // 情况二：已经有数据 —— 不再说「怎么开始」，改说「你有多少、下一步去哪」
+  if (title) title.textContent = "你现在录到这儿了";
+
+  const parts = [];
+  parts.push("已有 " + catCount + " 个板块、" + courseCount + " 门课程（其中已修 " + doneCount + " 门）。");
+
+  if (withRequired.length === 0) {
+    // 一个板块都没填要求学分 → 决策板块算不出差额，这才是他看到空白的原因
+    parts.push("下方「决策板块」之所以空，是因为还没填各板块的「要求学分」：" +
+      "点上面的「板块」，把每个板块要修多少学分填上，这里就会算出还差多少。");
+  } else if (totalGap > 0) {
+    parts.push("按已填的要求学分算，" + withRequired.length + " 个板块合计还差 " +
+      formatNumber(totalGap) + " 学分。");
+  } else {
+    parts.push("已填要求学分的 " + withRequired.length + " 个板块都修够了。");
+  }
+
+  if (lackRequired > 0) {
+    parts.push("另外 " + lackRequired + " 个板块没填「要求学分」，暂时不参与差额计算。");
+  }
+
+  // 判据要看「有没有已修课缺成绩」，不是「已修数 < 课程总数」。
+  // 踩过的坑：原来写的是 doneCount < courseCount，
+  // 结果「1 门课、已修、但成绩留空」这种最典型的情况判不出来
+  // （1 < 1 为假），绩点板块照样是「—」，提示却不出现。
+  const missingScore = state.courses.filter(function (c) {
+    return countsAsDoneCredits(c) &&
+      (c.score === null || c.score === undefined || c.score === "");
+  }).length;
+
+  if (missingScore > 0) {
+    parts.push("另有 " + missingScore + " 门已修的课没填「成绩」，所以上方平均分和 GPA 算不出来" +
+      "（在「课程」页点该课的「修改」把成绩补上即可）。");
+  }
+
+  if (lead) lead.textContent = parts.join(" ");
+  if (steps) steps.hidden = true;
 }
 
 // ---------------------------------------------------------------------------

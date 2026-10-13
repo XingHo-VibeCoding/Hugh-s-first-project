@@ -8,7 +8,7 @@
      漏过一次：Day 28 改 style.css 时发现只有 JS 带戳、CSS 没带，
      结果改了样式却刷不出来 —— 和当初 app.js 的问题一模一样。
      「本地资源引用一律带戳」，CSS 也在内。 -->
-  <link rel="stylesheet" href="style.css?v=20261013b">
+  <link rel="stylesheet" href="style.css?v=20261013c">
 </head>
 <body>
   <header class="site-header">
@@ -149,10 +149,10 @@
       </div>
 
       <div class="view view-grid" id="view-dashboard" role="region" aria-label="概览">
-        <section class="panel panel-onboard" id="onboarding" hidden>
-          <h2>从这里开始</h2>
-          <p class="hint">这里现在还是空的 —— 不是加载失败。填数据只要两步：</p>
-          <ol class="onboard-steps">
+        <section class="panel panel-onboard" id="onboarding">
+          <h2 id="onboarding-title">从这里开始</h2>
+          <p class="hint" id="onboarding-lead"></p>
+          <ol class="onboard-steps" id="onboarding-steps">
             <li>
               <strong>先建板块</strong>：点上面的<b>「板块」</b>，把培养方案里的板块抄进去
               （比如「专业选修」要修 20 学分）。
@@ -273,7 +273,7 @@
        不用写具体时间戳，日期够用 —— 同一天反复发布本来就是小概率。
        另一种解法是在 CloudBase 控制台设缓存配置，两种都做更稳。 -->
   <script src="store.js?v=20261013"></script>
-  <script src="app.js?v=20261013b"></script>
+  <script src="app.js?v=20261013c"></script>
   <script src="importer/extract-courses.js?v=20261013"></script>
   <script src="importer/pdf-reader.js?v=20261013"></script>
   <script src="importer/docx-reader.js?v=20261013"></script>

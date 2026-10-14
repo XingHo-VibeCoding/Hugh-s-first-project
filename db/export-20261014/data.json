@@ -1,0 +1,913 @@
+{
+  "exportedAt": "2026-10-14T06:17:56.957Z",
+  "source": "https://my-first-project-d2epfvu0373796b.service.tcloudbase.com",
+  "note": "学分规划助手 · 云数据库导出（含软删除课程）。恢复见 db/EXPORT_RESTORE.md",
+  "counts": {
+    "courses": 108,
+    "categories": 6
+  },
+  "categories": [
+    {
+      "id": "c1",
+      "name": "通识必修",
+      "requiredCredits": 38,
+      "note": ""
+    },
+    {
+      "id": "c2",
+      "name": "专业核心",
+      "requiredCredits": 42,
+      "note": ""
+    },
+    {
+      "id": "c3",
+      "name": "专业选修",
+      "requiredCredits": 12,
+      "note": "须含 2 学分艺术类"
+    },
+    {
+      "id": "c4",
+      "name": "通识选修",
+      "requiredCredits": 10,
+      "note": "至少 2 学分艺术类"
+    },
+    {
+      "id": "c5",
+      "name": "实践环节",
+      "requiredCredits": 8,
+      "note": ""
+    },
+    {
+      "id": "c6",
+      "name": "自由选修",
+      "requiredCredits": null,
+      "note": "要求学分未定，等培养方案出来再填"
+    }
+  ],
+  "courses": [
+    {
+      "id": "k01",
+      "name": "大学英语",
+      "credits": 3,
+      "categoryId": "c1",
+      "status": "done",
+      "score": 95
+    },
+    {
+      "id": "k02",
+      "name": "高等数学A",
+      "credits": 4,
+      "categoryId": "c2",
+      "status": "done",
+      "score": 88
+    },
+    {
+      "id": "k03",
+      "name": "大学物理B",
+      "credits": 3.5,
+      "categoryId": "c2",
+      "status": "done",
+      "score": 76
+    },
+    {
+      "id": "k04",
+      "name": "天文学导论",
+      "credits": 3,
+      "categoryId": "c2",
+      "status": "done",
+      "score": 91
+    },
+    {
+      "id": "k05",
+      "name": "实测天体物理",
+      "credits": 2.5,
+      "categoryId": "c2",
+      "status": "done",
+      "score": 58
+    },
+    {
+      "id": "k06",
+      "name": "天体测量学",
+      "credits": 3,
+      "categoryId": "c3",
+      "status": "planned",
+      "score": null
+    },
+    {
+      "id": "k07",
+      "name": "天体力学",
+      "credits": 3,
+      "categoryId": "c3",
+      "status": "planned",
+      "score": null
+    },
+    {
+      "id": "k09",
+      "name": "学术讲座",
+      "credits": 1.5,
+      "categoryId": null,
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "k08",
+      "name": "艺术鉴赏（已改）",
+      "credits": 2,
+      "categoryId": "c4",
+      "status": "done",
+      "score": 66
+    },
+    {
+      "id": "kmutv6ts8keaa",
+      "name": "线性代数",
+      "credits": 3,
+      "categoryId": "c2",
+      "status": "planned",
+      "score": null
+    },
+    {
+      "id": "kmutvfcvlta9u",
+      "name": "机器学习导论",
+      "credits": 3.5,
+      "categoryId": "c3",
+      "status": "planned",
+      "score": null
+    },
+    {
+      "id": "kmuwn9bkpax7k",
+      "name": "三件套验证课",
+      "credits": 2.5,
+      "categoryId": "c2",
+      "status": "done",
+      "score": 91
+    },
+    {
+      "id": "kmuzme15659nj",
+      "name": "周验收验证课",
+      "credits": 1.5,
+      "categoryId": "c4",
+      "status": "done",
+      "score": 73
+    },
+    {
+      "id": "kmuzn4uu2du6h",
+      "name": "云端检查台测试课 · 22:37:28",
+      "credits": 2.5,
+      "categoryId": "c2",
+      "status": "done",
+      "score": 88
+    },
+    {
+      "id": "kmuzoctkhgtgp",
+      "name": "反假检测课",
+      "credits": 3,
+      "categoryId": "c5",
+      "status": "done",
+      "score": 80
+    },
+    {
+      "id": "kmuzpewan5iqs",
+      "name": "Day22自检专用课",
+      "credits": 3,
+      "categoryId": "c3",
+      "status": "done",
+      "score": 88
+    },
+    {
+      "id": "kmv0zt3yp3kbq",
+      "name": "频率测试0",
+      "credits": 1,
+      "categoryId": "c5",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv0zt4bw4gso",
+      "name": "频率测试1",
+      "credits": 1,
+      "categoryId": "c5",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv0zt4mwsf15",
+      "name": "频率测试2",
+      "credits": 1,
+      "categoryId": "c5",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv0zt4yy8bl3",
+      "name": "频率测试3",
+      "credits": 1,
+      "categoryId": "c5",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv0zt5bjswsv",
+      "name": "频率测试4",
+      "credits": 1,
+      "categoryId": "c5",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv0zt5ndiqjb",
+      "name": "频率测试5",
+      "credits": 1,
+      "categoryId": "c5",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv0zt60rhrtg",
+      "name": "频率测试6",
+      "credits": 1,
+      "categoryId": "c5",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv0zt6d818ux",
+      "name": "频率测试7",
+      "credits": 1,
+      "categoryId": "c5",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv0zt6ujz9we",
+      "name": "频率测试8",
+      "credits": 1,
+      "categoryId": "c5",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv0zt7610wz0",
+      "name": "频率测试9",
+      "credits": 1,
+      "categoryId": "c5",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv0zt7jj0bby",
+      "name": "频率测试10",
+      "credits": 1,
+      "categoryId": "c5",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv0zt7v9gris",
+      "name": "频率测试11",
+      "credits": 1,
+      "categoryId": "c5",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv109pgbev9k",
+      "name": "限流验证课0",
+      "credits": 1,
+      "categoryId": "c5",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv109ptvpib0",
+      "name": "限流验证课1",
+      "credits": 1,
+      "categoryId": "c5",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv109q7bu791",
+      "name": "限流验证课2",
+      "credits": 1,
+      "categoryId": "c5",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv109qnfe35d",
+      "name": "限流验证课3",
+      "credits": 1,
+      "categoryId": "c5",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv109r3dhnkr",
+      "name": "限流验证课4",
+      "credits": 1,
+      "categoryId": "c5",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv109rh8erow",
+      "name": "限流验证课5",
+      "credits": 1,
+      "categoryId": "c5",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv109rwg4v42",
+      "name": "限流验证课6",
+      "credits": 1,
+      "categoryId": "c5",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv109s9hxz2o",
+      "name": "限流验证课7",
+      "credits": 1,
+      "categoryId": "c5",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv109sru5vk1",
+      "name": "限流验证课8",
+      "credits": 1,
+      "categoryId": "c5",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv109t3bq523",
+      "name": "限流验证课9",
+      "credits": 1,
+      "categoryId": "c5",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv109tgi0vbi",
+      "name": "限流验证课10",
+      "credits": 1,
+      "categoryId": "c5",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv109ttdcfl9",
+      "name": "限流验证课11",
+      "credits": 1,
+      "categoryId": "c5",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv109u5pofxl",
+      "name": "限流验证课12",
+      "credits": 1,
+      "categoryId": "c5",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv109uifer39",
+      "name": "限流验证课13",
+      "credits": 1,
+      "categoryId": "c5",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv109uzuc6y7",
+      "name": "限流验证课14",
+      "credits": 1,
+      "categoryId": "c5",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv109vc29g00",
+      "name": "限流验证课15",
+      "credits": 1,
+      "categoryId": "c5",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv109vnm0ja9",
+      "name": "限流验证课16",
+      "credits": 1,
+      "categoryId": "c5",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv109w0o08cj",
+      "name": "限流验证课17",
+      "credits": 1,
+      "categoryId": "c5",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv109wduqzh7",
+      "name": "限流验证课18",
+      "credits": 1,
+      "categoryId": "c5",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv10acdivy2f",
+      "name": "预检后写入验证",
+      "credits": 1,
+      "categoryId": "c5",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv111h3noalc",
+      "name": "限流回归课1",
+      "credits": 1,
+      "categoryId": "c5",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv111hppqbm9",
+      "name": "限流回归课2",
+      "credits": 1,
+      "categoryId": "c5",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv111ib2jfue",
+      "name": "限流回归课3",
+      "credits": 1,
+      "categoryId": "c5",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv111ivw7j73",
+      "name": "限流回归课4",
+      "credits": 1,
+      "categoryId": "c5",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv111jhkjtxs",
+      "name": "限流回归课5",
+      "credits": 1,
+      "categoryId": "c5",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv111k39c1hx",
+      "name": "限流回归课6",
+      "credits": 1,
+      "categoryId": "c5",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv111ko5yrb0",
+      "name": "限流回归课7",
+      "credits": 1,
+      "categoryId": "c5",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv111l93q9bw",
+      "name": "限流回归课8",
+      "credits": 1,
+      "categoryId": "c5",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv111lul0bil",
+      "name": "限流回归课9",
+      "credits": 1,
+      "categoryId": "c5",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv111mgy8f38",
+      "name": "限流回归课10",
+      "credits": 1,
+      "categoryId": "c5",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv111n2v7u32",
+      "name": "限流回归课11",
+      "credits": 1,
+      "categoryId": "c5",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv111nnssmia",
+      "name": "限流回归课12",
+      "credits": 1,
+      "categoryId": "c5",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv111o8w491e",
+      "name": "限流回归课13",
+      "credits": 1,
+      "categoryId": "c5",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv111p1skirz",
+      "name": "限流回归课14",
+      "credits": 1,
+      "categoryId": "c5",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv111plu7cws",
+      "name": "限流回归课15",
+      "credits": 1,
+      "categoryId": "c5",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv111q7fiavp",
+      "name": "限流回归课16",
+      "credits": 1,
+      "categoryId": "c5",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv21fnekw67c",
+      "name": "清单测试课T202316",
+      "credits": 2.5,
+      "categoryId": "c1",
+      "status": "done",
+      "score": 66
+    },
+    {
+      "id": "kmv21fotjaotk",
+      "name": "防重复课T202316",
+      "credits": 1,
+      "categoryId": "c2",
+      "status": "planned",
+      "score": null
+    },
+    {
+      "id": "kmv21fpc4ybal",
+      "name": "类型错T202316",
+      "credits": 3,
+      "categoryId": "c1",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv21fqah45zb",
+      "name": "未归类T202316",
+      "credits": 3,
+      "categoryId": null,
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv21hflyrt1h",
+      "name": "查证删除行为",
+      "credits": 3,
+      "categoryId": "c1",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv21i5750qg7",
+      "name": "复现测试19742",
+      "credits": 3,
+      "categoryId": "c1",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv21i5rzv0ow",
+      "name": "复现测试20669",
+      "credits": 3,
+      "categoryId": "c1",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv21i6bfglsa",
+      "name": "复现测试31391",
+      "credits": 3,
+      "categoryId": "c1",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv21il7it0a9",
+      "name": "防重复查证5340",
+      "credits": 1,
+      "categoryId": "c2",
+      "status": "planned",
+      "score": null
+    },
+    {
+      "id": "kmv21j1uzim7d",
+      "name": "对比测试61812",
+      "credits": 3,
+      "categoryId": "c1",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv227hsjlwtr",
+      "name": "复现测试12171",
+      "credits": 3,
+      "categoryId": "c1",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv227inmcobt",
+      "name": "复现测试23593",
+      "credits": 3,
+      "categoryId": "c1",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv227j4paduf",
+      "name": "复现测试34454",
+      "credits": 3,
+      "categoryId": "c1",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv227vot8age",
+      "name": "分解验证520",
+      "credits": 1,
+      "categoryId": "c1",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv2299pst71p",
+      "name": "分解验证B584",
+      "credits": 1,
+      "categoryId": "c1",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv229w70540u",
+      "name": "终检614",
+      "credits": 1,
+      "categoryId": "c1",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv22a56d7jxi",
+      "name": "终检B625",
+      "credits": 1,
+      "categoryId": "c1",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv22acqiu6z9",
+      "name": "清单测试课T635340",
+      "credits": 2.5,
+      "categoryId": "c1",
+      "status": "done",
+      "score": 66
+    },
+    {
+      "id": "kmv22adn5txdj",
+      "name": "传id测试AT635340",
+      "credits": 1,
+      "categoryId": "c1",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv22adx5j2vt",
+      "name": "传id测试BT635340",
+      "credits": 1,
+      "categoryId": "c1",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv22aef6mx2j",
+      "name": "传id测试CT635340",
+      "credits": 1,
+      "categoryId": "c1",
+      "status": "done",
+      "score": 55
+    },
+    {
+      "id": "kmv22aimixf6l",
+      "name": "防重复课T635340",
+      "credits": 1,
+      "categoryId": "c2",
+      "status": "planned",
+      "score": null
+    },
+    {
+      "id": "kmv22fwjsmcng",
+      "name": "清单测试课T893631",
+      "credits": 2.5,
+      "categoryId": "c1",
+      "status": "done",
+      "score": 66
+    },
+    {
+      "id": "kmv22fxmzj5qz",
+      "name": "传id测试AT893631",
+      "credits": 1,
+      "categoryId": "c1",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv22fy10yb0g",
+      "name": "传id测试BT893631",
+      "credits": 1,
+      "categoryId": "c1",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv22fyrfqbnk",
+      "name": "传id测试CT893631",
+      "credits": 1,
+      "categoryId": "c1",
+      "status": "done",
+      "score": 55
+    },
+    {
+      "id": "kmv22fz5vl9uw",
+      "name": "防重复课T893631",
+      "credits": 1,
+      "categoryId": "c2",
+      "status": "planned",
+      "score": null
+    },
+    {
+      "id": "kmv22hbae5crf",
+      "name": "类型错T893631",
+      "credits": 3,
+      "categoryId": "c1",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv22hcgkkunb",
+      "name": "未归类T893631",
+      "credits": 3,
+      "categoryId": null,
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv22k4bl3rxn",
+      "name": "清单测试课T090405",
+      "credits": 2.5,
+      "categoryId": "c1",
+      "status": "done",
+      "score": 66
+    },
+    {
+      "id": "kmv22k5epbew3",
+      "name": "传id测试AT090405",
+      "credits": 1,
+      "categoryId": "c1",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv22k5oswgyy",
+      "name": "传id测试BT090405",
+      "credits": 1,
+      "categoryId": "c1",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv22k67l1mcx",
+      "name": "传id测试CT090405",
+      "credits": 1,
+      "categoryId": "c1",
+      "status": "done",
+      "score": 55
+    },
+    {
+      "id": "kmv22k6j7n6nz",
+      "name": "防重复课T090405",
+      "credits": 1,
+      "categoryId": "c2",
+      "status": "planned",
+      "score": null
+    },
+    {
+      "id": "kmv22linoa8ny",
+      "name": "类型错T090405",
+      "credits": 3,
+      "categoryId": "c1",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv22ljvty4yk",
+      "name": "未归类T090405",
+      "credits": 3,
+      "categoryId": null,
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv2gvawgzjgw",
+      "name": "终验17735",
+      "credits": 1,
+      "categoryId": "c1",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv2gvmaze393",
+      "name": "终验13496",
+      "credits": 1,
+      "categoryId": "c1",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv2gw06twb4q",
+      "name": "终验11436",
+      "credits": 1,
+      "categoryId": "c1",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv2gw1ia3w1z",
+      "name": "修复验证23552",
+      "credits": 1,
+      "categoryId": "c1",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv2gw1u05uxr",
+      "name": "修复验证33995",
+      "credits": 1,
+      "categoryId": "c1",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv2gxny7h0cz",
+      "name": "限流复核",
+      "credits": 1,
+      "categoryId": "c1",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv2h2wufuuab",
+      "name": "干验13655",
+      "credits": 1,
+      "categoryId": "c1",
+      "status": "done",
+      "score": null
+    },
+    {
+      "id": "kmv2h3eghgs6l",
+      "name": "干验26605",
+      "credits": 1,
+      "categoryId": "c1",
+      "status": "done",
+      "score": null
+    }
+  ]
+}

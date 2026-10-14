@@ -9,7 +9,23 @@
  */
 const fs = require("fs");
 const puppeteer = require("puppeteer-core");
-const CHROME = "C://Users//w3224//.agent-browser//browsers//chrome-155.0.8059.39//chrome.exe";
+// Chrome 路径：按顺序探测，找不到就报错说清楚，别静默失败。
+// Day 28 踩的坑：这里写死了一条旧机器的路径，换台电脑就跑不了，
+// 报出来的是「path argument must be of type string」这种看不懂的错，
+// 很容易被误判成「功能坏了」。
+const CHROME_CANDIDATES = [
+  process.env.CHROME_PATH,
+  "C:/Program Files/Google/Chrome/Application/chrome.exe",
+  "C:/Program Files (x86)/Google/Chrome/Application/chrome.exe",
+  "C:/Users/" + process.env.USERNAME + "/AppData/Local/Google/Chrome/Application/chrome.exe",
+].filter(Boolean);
+const CHROME = CHROME_CANDIDATES.find(function (p) { return fs.existsSync(p); });
+if (!CHROME) {
+  console.error("[失败] 找不到 Chrome 可执行文件。试过：");
+  CHROME_CANDIDATES.forEach(function (p) { console.error("    " + p); });
+  console.error("→ 用环境变量指定：CHROME_PATH=C:/path/to/chrome.exe node scripts/measure-section-accuracy.js");
+  process.exit(1);
+}
 const PDF = process.argv[2];
 const TRUTH = JSON.parse(fs.readFileSync(__dirname + "/../db/truth-curriculum.json", "utf8"));
 
@@ -31,7 +47,10 @@ function norm(s) {
   try {
     const p = await b.newPage();
     p.on("pageerror", (e) => console.log("[JS错误] " + e.message));
-    await p.goto("http://127.0.0.1:8899/index.html", { waitUntil: "domcontentloaded" });
+    // 端口从环境变量拿，别写死 —— 写死的端口一被占用就跑不了，
+    // 而「跑不起来」会被误当成「功能有问题」（Day 28 踩过）。
+    const PORT = process.env.PORT || "8899";
+    await p.goto("http://127.0.0.1:" + PORT + "/index.html", { waitUntil: "domcontentloaded" });
     await new Promise((r) => setTimeout(r, 1500));
     await p.evaluate(() => { localStorage.clear(); location.hash = "#/courses"; });
     await new Promise((r) => setTimeout(r, 700));
@@ -112,6 +131,9 @@ function norm(s) {
     console.log("\n=== 真值里有、但没识别出的（前 20）===");
     noMatch.slice(0, 20).forEach((m) => console.log("  " + m.name));
   } catch (e) {
+    // 打完整堆栈：只打 message 会让人查不出是哪一行出的问题
+    // （Day 28 就在这绕了半天：同一个报错，根因其实是入参 undefined）
     console.log("错误: " + e.message.slice(0, 300));
+    console.log("堆栈:\n" + (e.stack || "").split("\n").slice(1, 6).join("\n"));
   } finally { await b.close(); }
 })();

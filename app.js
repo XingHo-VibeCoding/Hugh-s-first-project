@@ -3238,8 +3238,118 @@ function initDevPanel() {
   }
 }
 
+/* =============================================================================
+   课程名词典建议（Day 29）
+   -----------------------------------------------------------------------------
+   为什么有这个东西：
+   「自动识别板块」实测只有 65.3%，而且剩下的 34.7% 会把课分到**错误**的板块
+   （详见「板块自动识别-失败根因研究.md」，三条路都验证过，都走不通）。
+   但培养方案里本来就有「课程名 → 板块」的对应关系（真值集 100 门），
+   这份数据不该浪费 —— 拿它**给建议**，比让人凭记忆选快，也比乱猜准。
+
+   ⚠️ 为什么只建议、不自动填：
+   词典里的板块名是培养方案原文（「专业选修课程（天文数据处理方向」），
+   而用户自己建的板块名可能不同（「专业选修」）。
+   自动填会把方向信息丢掉 —— 而方向恰恰是用户选课时要的信息。
+   **错板块会让人以为「这门课不用修」，是实质性误导。**
+   → 所以：命中就给建议，由用户点一下采纳。
+
+   行为：
+   · 命中词典 → 显示「培养方案里这门课属于 XXX，要选吗？」+ 一个「选它」按钮
+   · 同名多个板块 → 全部列出，不替用户挑
+   · 没命中 → 什么都不显示（不打扰）
+============================================================================= */
+function bindDictHint() {
+  const nameInput = document.getElementById("course-name");
+  const catSelect = document.getElementById("course-category");
+  const hintBox = document.getElementById("dict-hint");
+  if (!nameInput || !catSelect || !hintBox) return;
+  if (!window.CourseDictionary) return;   // 词典没加载（比如离线）→ 静默跳过
+
+  function hide() {
+    hintBox.hidden = true;
+    hintBox.innerHTML = "";
+  }
+
+  function render() {
+    // ⚠️ 每次都重新取，并检查词典是否还在。
+    //   Day 29 实测发现：bindDictHint 开头只检查了一次，
+    //   如果词典脚本加载失败后又重试，render 里直接用 window.CourseDictionary
+    //   会抛 undefined 错误，而且**提示框会卡在上一次的内容上不消失** ——
+    //   用户会看到一条已经不相关的建议，比不显示更糟。
+    const dict = window.CourseDictionary;
+    if (!dict || typeof dict.suggest !== "function") { hide(); return; }
+
+    const raw = nameInput.value.trim();
+    if (!raw) { hide(); return; }
+
+    const r = dict.suggest(raw);
+    if (!r || !r.hit) { hide(); return; }   // 不认识这门课 → 不打扰
+
+    // 用户已经选了板块就不再提示（免得啰嗦）
+    if (catSelect.value) { hide(); return; }
+
+    hintBox.innerHTML = "";
+
+    const lead = document.createElement("span");
+    lead.className = "dict-hint-text";
+    lead.textContent = r.ambiguous
+      ? "培养方案里这门课出现在这些板块，请自己判断："
+      : "培养方案里这门课属于「" + r.sections[0] + "」，要选吗？";
+    hintBox.appendChild(lead);
+
+    r.sections.forEach(function (sectionName) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "dict-hint-btn";
+      btn.textContent = sectionName;
+
+      btn.addEventListener("click", function () {
+        // 词典名和用户板块名不完全一样，所以**做模糊匹配**：
+        // 1) 名字完全相同 → 直接选
+        // 2) 一方包含另一方（如「专业核心课程」vs「专业核心」）→ 选，并说明
+        // 3) 匹配不上 → 不选，只提示「这个板块你还没建」
+        let target = null;
+        state.categories.forEach(function (c) {
+          if (c.name === sectionName) { target = c; return; }
+        });
+        if (!target) {
+          const key = window.CourseDictionary.norm(sectionName);
+          state.categories.forEach(function (c) {
+            const cn = window.CourseDictionary.norm(c.name);
+            if (!target && (key.indexOf(cn) !== -1 || cn.indexOf(key) !== -1)) {
+              target = c;
+            }
+          });
+        }
+
+        if (target) {
+          catSelect.value = target.id;
+          lead.textContent = "已按建议选了「" + target.name + "」，不对可以自己改。";
+          btn.disabled = true;
+          btn.classList.add("is-applied");
+        } else {
+          lead.textContent = "你还没有建「" + sectionName + "」这个板块 —— 先去「板块」页加一个。";
+          btn.disabled = true;
+        }
+      });
+
+      hintBox.appendChild(btn);
+    });
+
+    hintBox.hidden = false;
+  }
+
+  nameInput.addEventListener("input", render);
+  // 课程名输入框失焦时也提示一次（有人是粘贴进来的，input 不一定触发）
+  nameInput.addEventListener("blur", render);
+  // 用户自己选了板块 → 收起提示
+  catSelect.addEventListener("change", hide);
+}
+
 document.addEventListener("DOMContentLoaded", function () {
   initDevPanel();
+  bindDictHint();
   bindEvents();
   enterLoading();
 

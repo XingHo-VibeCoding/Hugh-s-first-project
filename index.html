@@ -83,6 +83,13 @@
             <option value="planned">计划修</option>
           </select>
           <input type="number" id="course-score" min="0" max="100" step="1" placeholder="成绩（可选）">
+
+          <!-- 词典建议（Day 29）：输入课程名后，若命中培养方案词典，
+               在这里给一句建议。**只建议不自动填** —— 词典里的板块名是
+               培养方案原文，和用户自己建的板块往往不同名，
+               自动填会把「专业选修课程（天文数据处理方向）」塞进「专业选修」，
+               方向信息就丢了。留给人点一下，才不会错。 -->
+          <div class="dict-hint" id="dict-hint" hidden></div>
           <button type="submit" class="btn">添加课程</button>
         </form>
   <p class="form-error" id="course-error" hidden></p>
@@ -273,6 +280,7 @@
        不用写具体时间戳，日期够用 —— 同一天反复发布本来就是小概率。
        另一种解法是在 CloudBase 控制台设缓存配置，两种都做更稳。 -->
   <script src="store.js?v=20261013"></script>
+  <script src="db/course-dictionary.js?v=20261013a"></script>
   <script src="app.js?v=20261013c"></script>
   <script src="importer/extract-courses.js?v=20261013"></script>
   <script src="importer/pdf-reader.js?v=20261013"></script>

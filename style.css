@@ -91,6 +91,56 @@ body {
   margin: 0;
 }
 
+/* 课程名词典建议（Day 29）
+   位置：在课程表单里，占满一行，跟着课程名输入框走 */
+.dict-hint {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: -4px;
+  padding: 8px 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-soft);
+  background: #f4f8ff;
+  border: 1px solid #c8dcf5;
+  border-radius: 8px;
+}
+
+/* 板名是用户可点的按钮，但视觉上要弱于主按钮 —— 它只是个建议 */
+.dict-hint-btn {
+  padding: 4px 10px;
+  font-family: inherit;
+  font-size: 13px;
+  color: #1c5aa8;
+  background: #ffffff;
+  border: 1px solid #9cc0ea;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.dict-hint-btn:hover:not(:disabled) {
+  background: #eaf2fd;
+}
+
+.dict-hint-btn:disabled {
+  cursor: default;
+  opacity: 0.75;
+}
+
+/* 已采纳的那个：给个「已选中」的视觉，不让用户重复点 */
+.dict-hint-btn.is-applied {
+  background: #dff0e0;
+  border-color: #8fbf90;
+  color: #2c6b31;
+}
+
+.dict-hint-text {
+  flex: 0 0 auto;
+}
+
 /* 开发者工具（示例数据 / 状态预览）：放在页面底部、虚线框弱化
    Day 9：原先摆在头部，和产品标题并排，第一眼看上去像没做完的东西
    Day 27：v1.0 已发布，第三方试用者第一眼就看到这块灰的「开发者工具」，

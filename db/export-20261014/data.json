@@ -1,10 +1,12 @@
 {
-  "exportedAt": "2026-10-14T06:17:56.957Z",
+  "exportedAt": "2026-10-16T09:40:02.449Z",
   "source": "https://my-first-project-d2epfvu0373796b.service.tcloudbase.com",
-  "note": "学分规划助手 · 云数据库导出（含软删除课程）。恢复见 db/EXPORT_RESTORE.md",
+  "note": "学分规划助手 · 云数据库导出。courses 里 wasDeleted=true 表示原本是软删状态，restore.sql 已把它还原成 deleted_at 非空（恢复后仍不可见，与线上一致）。",
   "counts": {
     "courses": 108,
-    "categories": 6
+    "categories": 6,
+    "coursesAlive": 8,
+    "coursesSoftDeleted": 100
   },
   "categories": [
     {
@@ -51,7 +53,8 @@
       "credits": 3,
       "categoryId": "c1",
       "status": "done",
-      "score": 95
+      "score": 95,
+      "wasDeleted": false
     },
     {
       "id": "k02",
@@ -59,7 +62,8 @@
       "credits": 4,
       "categoryId": "c2",
       "status": "done",
-      "score": 88
+      "score": 88,
+      "wasDeleted": false
     },
     {
       "id": "k03",
@@ -67,7 +71,8 @@
       "credits": 3.5,
       "categoryId": "c2",
       "status": "done",
-      "score": 76
+      "score": 76,
+      "wasDeleted": false
     },
     {
       "id": "k04",
@@ -75,7 +80,8 @@
       "credits": 3,
       "categoryId": "c2",
       "status": "done",
-      "score": 91
+      "score": 91,
+      "wasDeleted": false
     },
     {
       "id": "k05",
@@ -83,7 +89,8 @@
       "credits": 2.5,
       "categoryId": "c2",
       "status": "done",
-      "score": 58
+      "score": 58,
+      "wasDeleted": false
     },
     {
       "id": "k06",
@@ -91,7 +98,8 @@
       "credits": 3,
       "categoryId": "c3",
       "status": "planned",
-      "score": null
+      "score": null,
+      "wasDeleted": false
     },
     {
       "id": "k07",
@@ -99,7 +107,8 @@
       "credits": 3,
       "categoryId": "c3",
       "status": "planned",
-      "score": null
+      "score": null,
+      "wasDeleted": false
     },
     {
       "id": "k09",
@@ -107,7 +116,8 @@
       "credits": 1.5,
       "categoryId": null,
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": false
     },
     {
       "id": "k08",
@@ -115,7 +125,8 @@
       "credits": 2,
       "categoryId": "c4",
       "status": "done",
-      "score": 66
+      "score": 66,
+      "wasDeleted": true
     },
     {
       "id": "kmutv6ts8keaa",
@@ -123,7 +134,8 @@
       "credits": 3,
       "categoryId": "c2",
       "status": "planned",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmutvfcvlta9u",
@@ -131,7 +143,8 @@
       "credits": 3.5,
       "categoryId": "c3",
       "status": "planned",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmuwn9bkpax7k",
@@ -139,7 +152,8 @@
       "credits": 2.5,
       "categoryId": "c2",
       "status": "done",
-      "score": 91
+      "score": 91,
+      "wasDeleted": true
     },
     {
       "id": "kmuzme15659nj",
@@ -147,7 +161,8 @@
       "credits": 1.5,
       "categoryId": "c4",
       "status": "done",
-      "score": 73
+      "score": 73,
+      "wasDeleted": true
     },
     {
       "id": "kmuzn4uu2du6h",
@@ -155,7 +170,8 @@
       "credits": 2.5,
       "categoryId": "c2",
       "status": "done",
-      "score": 88
+      "score": 88,
+      "wasDeleted": true
     },
     {
       "id": "kmuzoctkhgtgp",
@@ -163,7 +179,8 @@
       "credits": 3,
       "categoryId": "c5",
       "status": "done",
-      "score": 80
+      "score": 80,
+      "wasDeleted": true
     },
     {
       "id": "kmuzpewan5iqs",
@@ -171,7 +188,8 @@
       "credits": 3,
       "categoryId": "c3",
       "status": "done",
-      "score": 88
+      "score": 88,
+      "wasDeleted": true
     },
     {
       "id": "kmv0zt3yp3kbq",
@@ -179,7 +197,8 @@
       "credits": 1,
       "categoryId": "c5",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv0zt4bw4gso",
@@ -187,7 +206,8 @@
       "credits": 1,
       "categoryId": "c5",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv0zt4mwsf15",
@@ -195,7 +215,8 @@
       "credits": 1,
       "categoryId": "c5",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv0zt4yy8bl3",
@@ -203,7 +224,8 @@
       "credits": 1,
       "categoryId": "c5",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv0zt5bjswsv",
@@ -211,7 +233,8 @@
       "credits": 1,
       "categoryId": "c5",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv0zt5ndiqjb",
@@ -219,7 +242,8 @@
       "credits": 1,
       "categoryId": "c5",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv0zt60rhrtg",
@@ -227,7 +251,8 @@
       "credits": 1,
       "categoryId": "c5",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv0zt6d818ux",
@@ -235,7 +260,8 @@
       "credits": 1,
       "categoryId": "c5",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv0zt6ujz9we",
@@ -243,7 +269,8 @@
       "credits": 1,
       "categoryId": "c5",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv0zt7610wz0",
@@ -251,7 +278,8 @@
       "credits": 1,
       "categoryId": "c5",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv0zt7jj0bby",
@@ -259,7 +287,8 @@
       "credits": 1,
       "categoryId": "c5",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv0zt7v9gris",
@@ -267,7 +296,8 @@
       "credits": 1,
       "categoryId": "c5",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv109pgbev9k",
@@ -275,7 +305,8 @@
       "credits": 1,
       "categoryId": "c5",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv109ptvpib0",
@@ -283,7 +314,8 @@
       "credits": 1,
       "categoryId": "c5",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv109q7bu791",
@@ -291,7 +323,8 @@
       "credits": 1,
       "categoryId": "c5",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv109qnfe35d",
@@ -299,7 +332,8 @@
       "credits": 1,
       "categoryId": "c5",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv109r3dhnkr",
@@ -307,7 +341,8 @@
       "credits": 1,
       "categoryId": "c5",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv109rh8erow",
@@ -315,7 +350,8 @@
       "credits": 1,
       "categoryId": "c5",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv109rwg4v42",
@@ -323,7 +359,8 @@
       "credits": 1,
       "categoryId": "c5",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv109s9hxz2o",
@@ -331,7 +368,8 @@
       "credits": 1,
       "categoryId": "c5",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv109sru5vk1",
@@ -339,7 +377,8 @@
       "credits": 1,
       "categoryId": "c5",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv109t3bq523",
@@ -347,7 +386,8 @@
       "credits": 1,
       "categoryId": "c5",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv109tgi0vbi",
@@ -355,7 +395,8 @@
       "credits": 1,
       "categoryId": "c5",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv109ttdcfl9",
@@ -363,7 +404,8 @@
       "credits": 1,
       "categoryId": "c5",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv109u5pofxl",
@@ -371,7 +413,8 @@
       "credits": 1,
       "categoryId": "c5",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv109uifer39",
@@ -379,7 +422,8 @@
       "credits": 1,
       "categoryId": "c5",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv109uzuc6y7",
@@ -387,7 +431,8 @@
       "credits": 1,
       "categoryId": "c5",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv109vc29g00",
@@ -395,7 +440,8 @@
       "credits": 1,
       "categoryId": "c5",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv109vnm0ja9",
@@ -403,7 +449,8 @@
       "credits": 1,
       "categoryId": "c5",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv109w0o08cj",
@@ -411,7 +458,8 @@
       "credits": 1,
       "categoryId": "c5",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv109wduqzh7",
@@ -419,7 +467,8 @@
       "credits": 1,
       "categoryId": "c5",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv10acdivy2f",
@@ -427,7 +476,8 @@
       "credits": 1,
       "categoryId": "c5",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv111h3noalc",
@@ -435,7 +485,8 @@
       "credits": 1,
       "categoryId": "c5",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv111hppqbm9",
@@ -443,7 +494,8 @@
       "credits": 1,
       "categoryId": "c5",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv111ib2jfue",
@@ -451,7 +503,8 @@
       "credits": 1,
       "categoryId": "c5",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv111ivw7j73",
@@ -459,7 +512,8 @@
       "credits": 1,
       "categoryId": "c5",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv111jhkjtxs",
@@ -467,7 +521,8 @@
       "credits": 1,
       "categoryId": "c5",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv111k39c1hx",
@@ -475,7 +530,8 @@
       "credits": 1,
       "categoryId": "c5",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv111ko5yrb0",
@@ -483,7 +539,8 @@
       "credits": 1,
       "categoryId": "c5",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv111l93q9bw",
@@ -491,7 +548,8 @@
       "credits": 1,
       "categoryId": "c5",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv111lul0bil",
@@ -499,7 +557,8 @@
       "credits": 1,
       "categoryId": "c5",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv111mgy8f38",
@@ -507,7 +566,8 @@
       "credits": 1,
       "categoryId": "c5",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv111n2v7u32",
@@ -515,7 +575,8 @@
       "credits": 1,
       "categoryId": "c5",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv111nnssmia",
@@ -523,7 +584,8 @@
       "credits": 1,
       "categoryId": "c5",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv111o8w491e",
@@ -531,7 +593,8 @@
       "credits": 1,
       "categoryId": "c5",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv111p1skirz",
@@ -539,7 +602,8 @@
       "credits": 1,
       "categoryId": "c5",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv111plu7cws",
@@ -547,7 +611,8 @@
       "credits": 1,
       "categoryId": "c5",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv111q7fiavp",
@@ -555,7 +620,8 @@
       "credits": 1,
       "categoryId": "c5",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv21fnekw67c",
@@ -563,7 +629,8 @@
       "credits": 2.5,
       "categoryId": "c1",
       "status": "done",
-      "score": 66
+      "score": 66,
+      "wasDeleted": true
     },
     {
       "id": "kmv21fotjaotk",
@@ -571,7 +638,8 @@
       "credits": 1,
       "categoryId": "c2",
       "status": "planned",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv21fpc4ybal",
@@ -579,7 +647,8 @@
       "credits": 3,
       "categoryId": "c1",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv21fqah45zb",
@@ -587,7 +656,8 @@
       "credits": 3,
       "categoryId": null,
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv21hflyrt1h",
@@ -595,7 +665,8 @@
       "credits": 3,
       "categoryId": "c1",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv21i5750qg7",
@@ -603,7 +674,8 @@
       "credits": 3,
       "categoryId": "c1",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv21i5rzv0ow",
@@ -611,7 +683,8 @@
       "credits": 3,
       "categoryId": "c1",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv21i6bfglsa",
@@ -619,7 +692,8 @@
       "credits": 3,
       "categoryId": "c1",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv21il7it0a9",
@@ -627,7 +701,8 @@
       "credits": 1,
       "categoryId": "c2",
       "status": "planned",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv21j1uzim7d",
@@ -635,7 +710,8 @@
       "credits": 3,
       "categoryId": "c1",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv227hsjlwtr",
@@ -643,7 +719,8 @@
       "credits": 3,
       "categoryId": "c1",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv227inmcobt",
@@ -651,7 +728,8 @@
       "credits": 3,
       "categoryId": "c1",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv227j4paduf",
@@ -659,7 +737,8 @@
       "credits": 3,
       "categoryId": "c1",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv227vot8age",
@@ -667,7 +746,8 @@
       "credits": 1,
       "categoryId": "c1",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv2299pst71p",
@@ -675,7 +755,8 @@
       "credits": 1,
       "categoryId": "c1",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv229w70540u",
@@ -683,7 +764,8 @@
       "credits": 1,
       "categoryId": "c1",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv22a56d7jxi",
@@ -691,7 +773,8 @@
       "credits": 1,
       "categoryId": "c1",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv22acqiu6z9",
@@ -699,7 +782,8 @@
       "credits": 2.5,
       "categoryId": "c1",
       "status": "done",
-      "score": 66
+      "score": 66,
+      "wasDeleted": true
     },
     {
       "id": "kmv22adn5txdj",
@@ -707,7 +791,8 @@
       "credits": 1,
       "categoryId": "c1",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv22adx5j2vt",
@@ -715,7 +800,8 @@
       "credits": 1,
       "categoryId": "c1",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv22aef6mx2j",
@@ -723,7 +809,8 @@
       "credits": 1,
       "categoryId": "c1",
       "status": "done",
-      "score": 55
+      "score": 55,
+      "wasDeleted": true
     },
     {
       "id": "kmv22aimixf6l",
@@ -731,7 +818,8 @@
       "credits": 1,
       "categoryId": "c2",
       "status": "planned",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv22fwjsmcng",
@@ -739,7 +827,8 @@
       "credits": 2.5,
       "categoryId": "c1",
       "status": "done",
-      "score": 66
+      "score": 66,
+      "wasDeleted": true
     },
     {
       "id": "kmv22fxmzj5qz",
@@ -747,7 +836,8 @@
       "credits": 1,
       "categoryId": "c1",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv22fy10yb0g",
@@ -755,7 +845,8 @@
       "credits": 1,
       "categoryId": "c1",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv22fyrfqbnk",
@@ -763,7 +854,8 @@
       "credits": 1,
       "categoryId": "c1",
       "status": "done",
-      "score": 55
+      "score": 55,
+      "wasDeleted": true
     },
     {
       "id": "kmv22fz5vl9uw",
@@ -771,7 +863,8 @@
       "credits": 1,
       "categoryId": "c2",
       "status": "planned",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv22hbae5crf",
@@ -779,7 +872,8 @@
       "credits": 3,
       "categoryId": "c1",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv22hcgkkunb",
@@ -787,7 +881,8 @@
       "credits": 3,
       "categoryId": null,
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv22k4bl3rxn",
@@ -795,7 +890,8 @@
       "credits": 2.5,
       "categoryId": "c1",
       "status": "done",
-      "score": 66
+      "score": 66,
+      "wasDeleted": true
     },
     {
       "id": "kmv22k5epbew3",
@@ -803,7 +899,8 @@
       "credits": 1,
       "categoryId": "c1",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv22k5oswgyy",
@@ -811,7 +908,8 @@
       "credits": 1,
       "categoryId": "c1",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv22k67l1mcx",
@@ -819,7 +917,8 @@
       "credits": 1,
       "categoryId": "c1",
       "status": "done",
-      "score": 55
+      "score": 55,
+      "wasDeleted": true
     },
     {
       "id": "kmv22k6j7n6nz",
@@ -827,7 +926,8 @@
       "credits": 1,
       "categoryId": "c2",
       "status": "planned",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv22linoa8ny",
@@ -835,7 +935,8 @@
       "credits": 3,
       "categoryId": "c1",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv22ljvty4yk",
@@ -843,7 +944,8 @@
       "credits": 3,
       "categoryId": null,
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv2gvawgzjgw",
@@ -851,7 +953,8 @@
       "credits": 1,
       "categoryId": "c1",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv2gvmaze393",
@@ -859,7 +962,8 @@
       "credits": 1,
       "categoryId": "c1",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv2gw06twb4q",
@@ -867,7 +971,8 @@
       "credits": 1,
       "categoryId": "c1",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv2gw1ia3w1z",
@@ -875,7 +980,8 @@
       "credits": 1,
       "categoryId": "c1",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv2gw1u05uxr",
@@ -883,7 +989,8 @@
       "credits": 1,
       "categoryId": "c1",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv2gxny7h0cz",
@@ -891,7 +998,8 @@
       "credits": 1,
       "categoryId": "c1",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv2h2wufuuab",
@@ -899,7 +1007,8 @@
       "credits": 1,
       "categoryId": "c1",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     },
     {
       "id": "kmv2h3eghgs6l",
@@ -907,7 +1016,8 @@
       "credits": 1,
       "categoryId": "c1",
       "status": "done",
-      "score": null
+      "score": null,
+      "wasDeleted": true
     }
   ]
 }

@@ -105,6 +105,7 @@ rows.slice(1).forEach(function (r) {
   const num = credits === null || credits === "" ? null : Number(credits);
   const catRaw = get(["category_id", "categoryid"]);
   const scoreRaw = get(["score"]);
+  const deletedRaw = get(["deleted_at"]);
   soft.push({
     id: id,
     name: name,
@@ -112,6 +113,11 @@ rows.slice(1).forEach(function (r) {
     categoryId: catRaw === "" ? null : catRaw,
     status: get(["status"]) || "planned",
     score: scoreRaw === null || scoreRaw === "" ? null : Number(scoreRaw),
+    // ⚠️ Day 29 补上：控制台导出的 CSV 里有 deleted_at 列，
+    //   但合并时丢掉了 → 备份无法分辨「存活的」和「软删的」，
+    //   **照 restore.sql 恢复会把 99 门垃圾全变成存活的**。
+    //   必须保留这个标记，restore.sql 才能还原正确的可见性。
+    wasDeleted: !!deletedRaw,
   });
 });
 console.log("解析出 " + soft.length + " 门软删除课程\n");
@@ -126,6 +132,14 @@ soft.forEach(function (c) {
   if (byId.has(c.id)) { skipped++; return; }   // 已存在（就是存活那 8 门之一）
   byId.set(c.id, c);
   added++;
+});
+// 补齐 wasDeleted 字段（Day 29）：
+//   存活那几门来自 export-db-backup.js 拉的接口结果，而接口只返回
+//   deleted_at IS NULL 的行 —— 它们**天然就是存活的**，
+//   但没有 wasDeleted 这个字段。不补齐的话，
+//   「每条记录都标了可见性」这项自检会误报，而且恢复时会当成未知状态。
+payload.courses.forEach(function (c) {
+  if (typeof c.wasDeleted !== "boolean") c.wasDeleted = false;
 });
 console.log("合并结果：新增 " + added + " 门，已存在跳过 " + skipped + " 门");
 
@@ -174,10 +188,56 @@ function toSql(rows, cols, table) {
         cols.map(function (c) { return q(r[c]); }).join(", ") + ");";
     }).join("\n") + "\n";
 }
+
+/**
+ * 课程专用 SQL：**软删的要还原成软删状态**
+ *
+ * 为什么（Day 29 发现）：
+ *   备份里混着「存活的」和「软删的」两类记录，
+ *   但 if 只写业务字段、不写 deleted_at →
+ *   **恢复后 99 门测试垃圾会全部变成存活的**，全部出现在列表里。
+ *
+ *   还原办法：软删的记录，deleted_at 填一个过去的时间戳
+ *   （比如 2026-10-14T00:00:00Z），delete_expires_at 也填过去时间
+ *   → 恢复后它们仍是「已删除」，列表里看不见，和线上状态一致。
+ */
+function toCourseSql(rows) {
+  const PAST = "'2026-10-14T00:00:00Z'"; // 一个确定在过去的时间戳
+  const header = "-- 来源：" + payload.source + "\n" +
+    "-- 共 " + rows.length + " 行（含软删记录，会还原成 deleted_at 非空）\n\n";
+  return header + rows.map(function (r) {
+    const cols = COURSE_COLS.concat(["deleted_at", "delete_expires_at"]);
+    const deleted = r.wasDeleted;
+    const values = COURSE_COLS.map(function (c) {
+      return q(r[c]);
+    }).concat([deleted ? PAST : "NULL", deleted ? PAST : "NULL"]);
+    return "INSERT INTO public.courses (" + cols.join(", ") + ") VALUES (" +
+      values.join(", ") + ");";
+  }).join("\n") + "\n";
+}
+
 // ⚠️ categories 必须在前：schema.sql:60 有外键 REFERENCES public.categories(id)
 fs.writeFileSync(path.join(EXPORT_DIR, "restore.sql"),
   toSql(payload.categories, CAT_COLS, "categories") + "\n" +
-  toSql(merged, COURSE_COLS, "courses"), "utf8");
+  toCourseSql(merged), "utf8");
+
+// 备份的 json 里也要写清统计，避免以后看不懂
+const aliveN = merged.filter(function (c) { return !c.wasDeleted; }).length;
+const softN = merged.length - aliveN;
+payload.note = "学分规划助手 · 云数据库导出。courses 里 wasDeleted=true 表示原本是软删状态，" +
+  "restore.sql 已把它还原成 deleted_at 非空（恢复后仍不可见，与线上一致）。";
+payload.counts = {
+  courses: merged.length,
+  categories: payload.categories.length,
+  coursesAlive: aliveN,
+  coursesSoftDeleted: softN,
+};
+fs.writeFileSync(jsonPath, JSON.stringify(payload, null, 2), "utf8");
+
+console.log("\\n=== 恢复后可见性（重要）===");
+console.log("  存活（恢复后可见）：" + aliveN + " 门");
+console.log("  软删（恢复后不可见）：" + softN + " 门");
+console.log("  → restore.sql 已用 deleted_at 还原软删状态，**不会把垃圾变成可见数据**");
 
 fs.copyFileSync(csvPath, path.join(EXPORT_DIR, "soft-deleted-raw.csv"));
 
@@ -198,6 +258,33 @@ ok("restore.sql 的 INSERT 数 = 课程数 + 板块数",
 const rs = fs.readFileSync(path.join(EXPORT_DIR, "restore.sql"), "utf8");
 ok("categories 排在 courses 前（外键顺序）",
    rs.indexOf("INSERT INTO public.categories") < rs.indexOf("INSERT INTO public.courses"));
+
+// Day 29 补：备份必须能还原「软删状态」，否则恢复后垃圾全变可见
+const softInBackup = reread.courses.filter(function (c) { return c.wasDeleted; }).length;
+ok("data.json 里标出了哪些是软删的（wasDeleted）",
+   reread.courses.every(function (c) { return typeof c.wasDeleted === "boolean"; }),
+   "软删 " + softInBackup + " 门 / 存活 " + reread.courses.filter(function (c) { return !c.wasDeleted; }).length + " 门");
+ok("restore.sql 的 courses INSERT 写进了 deleted_at 列",
+   /INSERT INTO public\.courses \([^)]*deleted_at[^)]*\)/.test(rs));
+ok("restore.sql 里的软删行确实带了时间戳（不是全 NULL）",
+   /VALUES \([^)]*'\d{4}-\d{2}-\d{2}T/.test(rs),
+   "有 wasDeleted=true 的记录被写成了带时间戳");
+ok("备份文件声明了存活/软删的条数",
+   reread.counts && typeof reread.counts.coursesSoftDeleted === "number",
+   "存活 " + reread.counts.coursesAlive + " / 软删 " + reread.counts.coursesSoftDeleted);
+
+// 反向测试：**现在的数据必须是有标记的**。
+// 若哪天 wasDeleted 被丢掉（所有记录 undefined），
+// 上面「标出了哪些是软删的」和「restore.sql 带 deleted_at」两项就会 FAIL。
+const allMarked = reread.courses.every(function (c) {
+  return typeof c.wasDeleted === "boolean";
+});
+ok("反向测试：所有记录都带可见性标记（丢掉就会 FAIL）", allMarked === true,
+   allMarked ? "标记完整" : "有记录缺 wasDeleted → 检查项会 FAIL，符合预期");
+ok("反向测试：软删数 + 存活数 = 总数（不能凭空多出记录）",
+   reread.counts.coursesAlive + reread.counts.coursesSoftDeleted === reread.courses.length,
+   reread.counts.coursesAlive + " + " + reread.counts.coursesSoftDeleted +
+   " = " + reread.courses.length);
 
 const SECRET = /secret|password|token|api_key|access_key|private_key|AKID/i;
 const PRIVACY = /1[3-9]\d{9}|\d{17}[\dXx]|学号|姓名[:：]/;

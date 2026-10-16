@@ -520,6 +520,28 @@ async function dispatch(req) {
         }
       }
 
+      // 撤销删除（L-002，Day 29 修）
+      //
+      // ⚠️ 为什么用请求体标记 __restore，而不是契约里写的路径 /api/courses/:id/restore：
+      //   Day 24 实测：**网关不转发路径参数**（`/api/courses/k01/restore` 会被当成
+      //   `/api/courses` 并把 k01 当查询串），所以路径式撤销根本走不通。
+      //   用请求体里的标记字段，不依赖路径，可行。
+      //
+      // 判定放在 DELETE 分支里：撤销的语义就是「把这次删除撤掉」，
+      // 复用同一套 id 提取逻辑（请求体优先、其次 ?id=），不重复写一遍。
+      if (req.method === "DELETE" && payload.__restore) {
+        try {
+          const result = await courseEdit.restoreCourse(payload);
+          if (courseService.isBusinessError(result)) {
+            return fail(result.message, result.httpStatus, result.code, origin);
+          }
+          console.log("[api] 撤销删除成功", result.id);
+          return ok({ id: result.id, deleted: false, restored: true }, 200, origin);
+        } catch (err) {
+          return internalError(err, "撤销删除失败，稍后再试", origin);
+        }
+      }
+
       try {
         const result = await courseEdit.deleteCourse(payload);
         if (courseService.isBusinessError(result)) {

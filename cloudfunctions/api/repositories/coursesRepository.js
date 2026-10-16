@@ -139,18 +139,35 @@ async function updateCourse(id, patch) {
  * 建表时就留了 deleted_at / delete_expires_at 两个列（第 55–56 行），
  * 所以这里只打标记，数据行仍在表里——列表接口的 deleted_at=is.null 会自动跳过它。
  *
+ * ⚠️⚠️ Day 29 修掉的真 bug（契约第 10 条「5 秒内可撤销」从来没生效过）：
+ *   原来两个列写的都是 `nowIso`，也就是
+ *   **delete_expires_at = 删除时刻**，
+ *   而 service 层比较时是 `delete_expires_at < Date.now()` ——
+ *   删除后**一瞬间**就等于「已过期」，5 秒撤销窗口形同虚设。
+ *
+ *   症状：接口返回的 `restoreBefore` 是对的（now+5 秒，看起来正常），
+ *   但真去撤销立刻报「已超过可撤销时间（5 秒）」。
+ *   **响应里对、库里错**，只看接口返回发现不了。
+ *
+ *   修法：分开传两个时间 —— `nowIso` 给 deleted_at，`expiresIso` 给 delete_expires_at。
+ *   service 层早就算好了 expires，只是没往下传。
+ *
  * @param {string} id
- * @param {string} nowIso  当前时间（ISO），同时写到两个列
+ * @param {string} nowIso      删除时刻（ISO），写入 deleted_at
+ * @param {string} expiresIso  可撤销截止时刻（ISO = now + 窗口秒数），写入 delete_expires_at
  */
-async function softDeleteCourse(id, nowIso) {
+async function softDeleteCourse(id, nowIso, expiresIso) {
   const params = new URLSearchParams();
   params.set("id", "eq." + id);
   // deleted_at=is.null 是并发保护：只有"还没被删"的行会被命中，
   // 已经删过的行受影响行数为 0，上层据此返回 404 而不是假装又删了一次
   params.set("deleted_at", "is.null");
+
+  // 兼容旧调用：没给 expiresIso 时，至少别让 delete_expires_at 早于 deleted_at
+  const expires = expiresIso || nowIso;
   const result = await request("PATCH", "/courses?" + params.toString(), {
     deleted_at: nowIso,
-    delete_expires_at: nowIso,
+    delete_expires_at: expires,
   });
   const updated = Array.isArray(result) ? result[0] : result;
   if (!updated || !updated.id) {

@@ -142,7 +142,9 @@ async function deleteCourse(body) {
   const now = new Date();
   const expires = new Date(now.getTime() + RESTORE_WINDOW_SECONDS * 1000);
   try {
-    await courseRepo.softDeleteCourse(id, now.toISOString());
+    // ⚠️ Day 29 修：原来只传 nowIso，expires 算出来却没往下传，
+    //   导致库里 delete_expires_at = 删除时刻，5 秒撤销窗口形同虚设。
+    await courseRepo.softDeleteCourse(id, now.toISOString(), expires.toISOString());
   } catch (err) {
     if (err && err.status === 404) {
       // 并发：两次删除同时到，第二条受影响 0 行
